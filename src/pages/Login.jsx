@@ -105,11 +105,17 @@ const Login = ({ onLogin, onSignup }) => {
   <div className="flex flex-col items-center p-6 text-black">
 
     {/* ZED Logo */}
-    <img
+    {/* <img
       src="public/images/zed.png"
       alt="Shop owner"
       style={{ width: "180px", height: "auto" }}
-    />
+    /> */}
+    <img
+  src="/images/zed.png"
+  alt="Shop owner"
+  style={{ width: "180px", height: "auto" }}
+/>
+
 
     {/* SHOP OWNER text matched to logo width */}
     <h1

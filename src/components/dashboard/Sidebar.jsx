@@ -23,7 +23,7 @@ const Sidebar = ({ activePage, navigateTo }) => {
       {/* TOP LOGO SECTION */}
       <div className="p-4 text-center text-black border-b border-gray-200">
         <img
-          src="public\images\zed.png"
+          src="\images\zed.png"
           alt="Shop owner"
           className="mx-auto"
           style={{ maxWidth: '120px', height: 'auto' }}
