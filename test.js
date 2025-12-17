@@ -1,6 +1,5 @@
-
-// pages/Dashboard.jsx - PROFESSIONAL UPDATED VERSION WITH ATTRACTIVE COLORS & REAL APIs
-import React, { useState, useEffect } from "react";
+// pages/Dashboard.jsx - OPTIMIZED FAST LOADING VERSION
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import { dashboardAPI } from "../services/dashboardAPI";
@@ -9,338 +8,31 @@ const Dashboard = ({ onLogout, userData }) => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [orderChartRange, setOrderChartRange] = useState("day");
-  const [revenueChartRange, setRevenueChartRange] = useState("day");
+  
+  // Default to week for better data visualization
+  const [orderChartRange, setOrderChartRange] = useState("week");
+  const [revenueChartRange, setRevenueChartRange] = useState("week");
 
-  // Dashboard Data - Real data from APIs
+  // Dashboard Data with initial values
   const [dashboardStats, setDashboardStats] = useState({
     totalOrders: 0,
     totalRevenue: 0,
-    orderRatings: 0,
+    shopRating: 5.0,
     todayOrders: 0,
     todayRevenue: 0,
     openOrders: 0,
     totalCustomers: 0,
   });
 
-  // Order Volume Data by time range
-  const [orderVolumeData, setOrderVolumeData] = useState({
-    day: [],
-    week: [],
-    month: [],
-  });
-
-  // Revenue Data by time range
-  const [revenueData, setRevenueData] = useState({
-    day: [],
-    week: [],
-    month: [],
-  });
-
-  // Recent Orders Data
+  // Chart Data
+  const [orderVolumeData, setOrderVolumeData] = useState([]);
+  const [revenueData, setRevenueData] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
-
-  // Top Products Data
   const [topProducts, setTopProducts] = useState([]);
 
-  // Fetch all dashboard data on component mount
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  // Fetch order volume when range changes
-  useEffect(() => {
-    if (orderChartRange) {
-      fetchOrderVolumeData(orderChartRange);
-    }
-  }, [orderChartRange]);
-
-  // Fetch revenue data when range changes
-  useEffect(() => {
-    if (revenueChartRange) {
-      fetchRevenueData(revenueChartRange);
-    }
-  }, [revenueChartRange]);
-
-  // Fetch dashboard summary data
-  const fetchDashboardData = async () => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log("🚀 Fetching dashboard data...");
-      
-      // Fetch all dashboard data in parallel
-      const [statsRes, recentRes, topProductsRes] = await Promise.all([
-        dashboardAPI.getDashboardStats('month'),
-        dashboardAPI.getRecentOrders(5),
-        dashboardAPI.getTopProducts(5, 'month')
-      ]);
-
-      console.log("✅ Dashboard data fetched:", {
-        stats: statsRes.data,
-        recentOrders: recentRes.data,
-        topProducts: topProductsRes.data
-      });
-
-      // Set dashboard stats
-      if (statsRes.data.success && statsRes.data.stats) {
-        const stats = statsRes.data.stats;
-        setDashboardStats({
-          totalOrders: stats.totalOrders || 0,
-          totalRevenue: stats.totalRevenue || 0,
-          orderRatings: stats.shopRating || stats.orderRatings || 0,
-          todayOrders: stats.todayOrders || 0,
-          todayRevenue: stats.todayRevenue || 0,
-          openOrders: stats.openOrders || 0,
-          totalCustomers: stats.totalCustomers || 0,
-        });
-      }
-
-      // Set recent orders
-      if (recentRes.data.success && recentRes.data.orders) {
-        setRecentOrders(recentRes.data.orders.map(order => ({
-          id: order.orderId || `ORD-${order._id?.slice(-4) || '0000'}`,
-          customer: order.customerName || "Customer",
-          amount: order.totalAmount || 0,
-          status: order.status || "pending",
-          time: new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: true 
-          })
-        })));
-      }
-
-      // Set top products
-      if (topProductsRes.data.success && topProductsRes.data.products) {
-        setTopProducts(topProductsRes.data.products.map(product => ({
-          id: product._id || product.productId,
-          name: product.name || "Product",
-          sales: product.totalSold || product.sales || 0,
-          revenue: product.totalRevenue || product.revenue || 0,
-          price: product.price || 0
-        })));
-      }
-
-    } catch (error) {
-      console.error('❌ Error fetching dashboard data:', error);
-      setError(error.message || "Failed to load dashboard data");
-      
-      // Fallback to mock data if API fails
-      setDashboardStats({
-        totalOrders: 1256,
-        totalRevenue: 25480.5,
-        orderRatings: 4.7,
-        todayOrders: 24,
-        todayRevenue: 1245.5,
-        openOrders: 8,
-        totalCustomers: 342,
-      });
-      
-      setRecentOrders([
-        {
-          id: "ORD-9585",
-          customer: "John Davis",
-          amount: 37.3,
-          status: "preparing",
-          time: "10:24 AM",
-        },
-        {
-          id: "ORD-9584",
-          customer: "Lisa Thompson",
-          amount: 38.3,
-          status: "preparing",
-          time: "10:15 AM",
-        },
-        {
-          id: "ORD-9583",
-          customer: "Michael Brown",
-          amount: 42.5,
-          status: "ready",
-          time: "9:45 AM",
-        },
-        {
-          id: "ORD-9582",
-          customer: "Sarah Wilson",
-          amount: 46.15,
-          status: "assigned",
-          time: "9:30 AM",
-        },
-        {
-          id: "ORD-9581",
-          customer: "Robert Miller",
-          amount: 18.36,
-          status: "delivered",
-          time: "9:00 AM",
-        },
-      ]);
-      
-      setTopProducts([
-        { id: 1, name: "Margherita Pizza", sales: 156, revenue: 2956.44 },
-        { id: 2, name: "Chicken Burger", sales: 124, revenue: 2232.0 },
-        { id: 3, name: "Caesar Salad", sales: 98, revenue: 833.0 },
-        { id: 4, name: "Garlic Bread", sales: 87, revenue: 391.5 },
-        { id: 5, name: "Soft Drinks", sales: 215, revenue: 537.5 },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch order volume data
-  const fetchOrderVolumeData = async (range) => {
-    try {
-      console.log(`📈 Fetching ${range} order volume...`);
-      const response = await dashboardAPI.getOrderVolume(range);
-      
-      if (response.data.success && response.data.data) {
-        const apiData = response.data.data;
-        
-        // Transform API data to match our chart structure
-        const transformedData = apiData.map(item => ({
-          time: item.label || item.time || item.period || "",
-          orders: item.count || item.orders || item.value || 0
-        }));
-        
-        setOrderVolumeData(prev => ({
-          ...prev,
-          [range]: transformedData
-        }));
-        
-        console.log(`✅ ${range} order volume data set:`, transformedData);
-      } else {
-        // Fallback to mock data
-        setOrderVolumeData(prev => ({
-          ...prev,
-          [range]: getMockOrderData(range)
-        }));
-      }
-    } catch (error) {
-      console.error(`❌ Error fetching ${range} order volume:`, error);
-      // Fallback to mock data
-      setOrderVolumeData(prev => ({
-        ...prev,
-        [range]: getMockOrderData(range)
-      }));
-    }
-  };
-
-  // Fetch revenue data
-  const fetchRevenueData = async (range) => {
-    try {
-      console.log(`💰 Fetching ${range} revenue data...`);
-      const response = await dashboardAPI.getRevenueData(range);
-      
-      if (response.data.success && response.data.data) {
-        const apiData = response.data.data;
-        
-        // Transform API data to match our chart structure
-        const transformedData = apiData.map(item => ({
-          time: item.label || item.time || item.period || "",
-          revenue: item.amount || item.revenue || item.value || 0
-        }));
-        
-        setRevenueData(prev => ({
-          ...prev,
-          [range]: transformedData
-        }));
-        
-        console.log(`✅ ${range} revenue data set:`, transformedData);
-      } else {
-        // Fallback to mock data
-        setRevenueData(prev => ({
-          ...prev,
-          [range]: getMockRevenueData(range)
-        }));
-      }
-    } catch (error) {
-      console.error(`❌ Error fetching ${range} revenue data:`, error);
-      // Fallback to mock data
-      setRevenueData(prev => ({
-        ...prev,
-        [range]: getMockRevenueData(range)
-      }));
-    }
-  };
-
-  // Mock data fallback functions
-  const getMockOrderData = (range) => {
-    if (range === "day") {
-      return [
-        { time: "6 AM", orders: 2 },
-        { time: "8 AM", orders: 5 },
-        { time: "10 AM", orders: 10 },
-        { time: "12 PM", orders: 15 },
-        { time: "2 PM", orders: 12 },
-        { time: "4 PM", orders: 8 },
-        { time: "6 PM", orders: 16 },
-        { time: "8 PM", orders: 14 },
-        { time: "10 PM", orders: 7 },
-      ];
-    } else if (range === "week") {
-      return [
-        { time: "Mon", orders: 42 },
-        { time: "Tue", orders: 56 },
-        { time: "Wed", orders: 48 },
-        { time: "Thu", orders: 67 },
-        { time: "Fri", orders: 89 },
-        { time: "Sat", orders: 94 },
-        { time: "Sun", orders: 76 },
-      ];
-    } else {
-      return [
-        { time: "Week 1", orders: 312 },
-        { time: "Week 2", orders: 298 },
-        { time: "Week 3", orders: 356 },
-        { time: "Week 4", orders: 290 },
-      ];
-    }
-  };
-
-  const getMockRevenueData = (range) => {
-    if (range === "day") {
-      return [
-        { time: "6 AM", revenue: 85 },
-        { time: "8 AM", revenue: 210 },
-        { time: "10 AM", revenue: 420 },
-        { time: "12 PM", revenue: 635 },
-        { time: "2 PM", revenue: 510 },
-        { time: "4 PM", revenue: 340 },
-        { time: "6 PM", revenue: 680 },
-        { time: "8 PM", revenue: 595 },
-        { time: "10 PM", revenue: 298 },
-      ];
-    } else if (range === "week") {
-      return [
-        { time: "Mon", revenue: 1980 },
-        { time: "Tue", revenue: 2640 },
-        { time: "Wed", revenue: 2280 },
-        { time: "Thu", revenue: 3120 },
-        { time: "Fri", revenue: 4250 },
-        { time: "Sat", revenue: 4450 },
-        { time: "Sun", revenue: 3580 },
-      ];
-    } else {
-      return [
-        { time: "Week 1", revenue: 12480 },
-        { time: "Week 2", revenue: 11920 },
-        { time: "Week 3", revenue: 14240 },
-        { time: "Week 4", revenue: 11600 },
-      ];
-    }
-  };
-
-  // Handle range changes
-  const handleOrderRangeChange = (range) => {
-    setOrderChartRange(range);
-  };
-
-  const handleRevenueRangeChange = (range) => {
-    setRevenueChartRange(range);
-  };
-
+  // Formatting functions
   const formatCurrency = (amount) => {
+    if (!amount && amount !== 0) return "$0";
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -350,6 +42,7 @@ const Dashboard = ({ onLogout, userData }) => {
   };
 
   const formatCompactCurrency = (amount) => {
+    if (!amount && amount !== 0) return "$0";
     if (amount >= 1000) {
       return new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -376,7 +69,7 @@ const Dashboard = ({ onLogout, userData }) => {
       cancelled: { bg: "#e2e2e2ff", text: "#000", label: "Cancelled" },
     };
 
-    const style = config[status] || config.preparing;
+    const style = config[status] || config.pending;
 
     return (
       <span
@@ -393,37 +86,167 @@ const Dashboard = ({ onLogout, userData }) => {
     );
   };
 
-  // Calculate max values for charts
+  // Optimized data fetching with Promise.all for parallel loading
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.time("DashboardDataLoad");
+      
+      // Fetch ALL data in parallel for maximum speed
+      const [statsRes, recentRes, orderVolumeRes, revenueRes, topProductsRes] = await Promise.all([
+        dashboardAPI.getDashboardStats('month'),
+        dashboardAPI.getRecentOrders(5),
+        dashboardAPI.getOrderVolume(orderChartRange),
+        dashboardAPI.getRevenueData(revenueChartRange),
+        dashboardAPI.getTopProducts(5, 'month')
+      ]);
+
+      console.timeEnd("DashboardDataLoad");
+      
+      // Process stats data
+      if (statsRes.data.success && statsRes.data.stats) {
+        const stats = statsRes.data.stats;
+        setDashboardStats({
+          totalOrders: stats.totalOrders || 0,
+          totalRevenue: stats.totalRevenue || 0,
+          shopRating: stats.shopRating || 5.0,
+          todayOrders: stats.todayOrders || 0,
+          todayRevenue: stats.todayRevenue || 0,
+          openOrders: stats.openOrders || 0,
+          totalCustomers: stats.totalCustomers || 0,
+        });
+      }
+
+      // Process recent orders
+      if (recentRes.data.success && recentRes.data.orders) {
+        const orders = recentRes.data.orders;
+        setRecentOrders(orders.map(order => ({
+          id: order.id || order.orderId || `ORD-${Math.random().toString(36).substr(2, 4)}`,
+          customer: order.customer || order.customerName || "Customer",
+          amount: order.amount || order.total || 0,
+          status: order.status || "pending",
+          time: order.time || new Date(order.createdAt || Date.now()).toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          })
+        })));
+      }
+
+      // Process order volume data
+      if (orderVolumeRes.data.success && orderVolumeRes.data.data) {
+        setOrderVolumeData(orderVolumeRes.data.data);
+      }
+
+      // Process revenue data
+      if (revenueRes.data.success && revenueRes.data.data) {
+        setRevenueData(revenueRes.data.data);
+      }
+
+      // Process top products
+      if (topProductsRes.data.success && topProductsRes.data.products) {
+        const products = topProductsRes.data.products;
+        setTopProducts(products.map(product => ({
+          id: product._id || product.productId,
+          name: product.name || product.title || "Product",
+          sales: product.sales || product.totalSold || 0,
+          revenue: product.revenue || product.totalRevenue || 0,
+          price: product.price || 0
+        })));
+      }
+
+    } catch (error) {
+      console.error('❌ Error fetching dashboard data:', error);
+      setError(error.message || "Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  }, [orderChartRange, revenueChartRange]);
+
+  // Fetch chart data when range changes
+  useEffect(() => {
+    const fetchChartData = async () => {
+      try {
+        const [orderRes, revenueRes] = await Promise.all([
+          dashboardAPI.getOrderVolume(orderChartRange),
+          dashboardAPI.getRevenueData(revenueChartRange)
+        ]);
+        
+        if (orderRes.data.success && orderRes.data.data) {
+          setOrderVolumeData(orderRes.data.data);
+        }
+        
+        if (revenueRes.data.success && revenueRes.data.data) {
+          setRevenueData(revenueRes.data.data);
+        }
+      } catch (error) {
+        console.warn('Chart data fetch warning:', error);
+      }
+    };
+    
+    fetchChartData();
+  }, [orderChartRange, revenueChartRange]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Chart calculation functions
   const getMaxOrders = () => {
-    const currentData = orderVolumeData[orderChartRange] || [];
-    if (currentData.length === 0) return 10;
-    return Math.max(...currentData.map((d) => d.orders), 1);
+    if (orderVolumeData.length === 0) return 10;
+    const max = Math.max(...orderVolumeData.map((d) => d.orders), 1);
+    return Math.ceil(max / 5) * 5;
   };
 
   const getMaxRevenue = () => {
-    const currentData = revenueData[revenueChartRange] || [];
-    if (currentData.length === 0) return 1000;
-    return Math.max(...currentData.map((d) => d.revenue), 100);
+    if (revenueData.length === 0) return 1000;
+    const max = Math.max(...revenueData.map((d) => d.revenue), 100);
+    return Math.ceil(max / 500) * 500;
   };
 
-  // Get current active data
-  const currentOrderData = orderVolumeData[orderChartRange] || [];
-  const currentRevenueData = revenueData[revenueChartRange] || [];
-
-  // Calculate percentage changes (mock for now)
-  const calculatePercentageChange = (current, previous) => {
-    if (previous === 0) return "0%";
-    const change = ((current - previous) / previous * 100).toFixed(1);
-    return `${change > 0 ? '+' : ''}${change}%`;
+  // Calculate chart points
+  const calculateOrderChartPoints = () => {
+    if (orderVolumeData.length < 2) return [];
+    const maxOrders = getMaxOrders();
+    return orderVolumeData.map((point, index) => {
+      const x = (index / (orderVolumeData.length - 1)) * 100;
+      const y = 100 - (point.orders / maxOrders) * 100;
+      return { x, y, data: point };
+    });
   };
 
-  // Stats cards with improved design - Only 3 cards
+  const calculateRevenueChartPoints = () => {
+    if (revenueData.length < 2) return [];
+    const maxRevenue = getMaxRevenue();
+    return revenueData.map((point, index) => {
+      const x = (index / (revenueData.length - 1)) * 100;
+      const y = 100 - (point.revenue / maxRevenue) * 100;
+      return { x, y, data: point };
+    });
+  };
+
+  const orderChartPoints = calculateOrderChartPoints();
+  const revenueChartPoints = calculateRevenueChartPoints();
+
+  // Handle range changes
+  const handleOrderRangeChange = (range) => {
+    setOrderChartRange(range);
+  };
+
+  const handleRevenueRangeChange = (range) => {
+    setRevenueChartRange(range);
+  };
+
+  // Stats cards
   const statsCards = [
     {
       title: "Total Orders",
       value: dashboardStats.totalOrders.toLocaleString(),
-      change: calculatePercentageChange(dashboardStats.totalOrders, 1000),
-      changeType: dashboardStats.totalOrders > 1000 ? "up" : "down",
+      change: "",
+      changeType: "up",
       bgColor: "#e2e2e2ff",
       borderColor: "#bebebeff",
       accentColor: "#000000",
@@ -431,68 +254,38 @@ const Dashboard = ({ onLogout, userData }) => {
     {
       title: "Total Revenue",
       value: formatCurrency(dashboardStats.totalRevenue),
-      change: calculatePercentageChange(dashboardStats.totalRevenue, 20000),
-      changeType: dashboardStats.totalRevenue > 20000 ? "up" : "down",
+      change: "",
+      changeType: "up",
       bgColor: "#e2e2e2ff",
       borderColor: "#bebebeff",
       accentColor: "#000000",
     },
     {
-      title: "Order Ratings",
-      value: dashboardStats.orderRatings.toFixed(1),
+      title: "Shop Rating",
+      value: dashboardStats.shopRating.toFixed(1),
       suffix: "/5",
-      change: dashboardStats.orderRatings >= 4.5 ? "Excellent" : dashboardStats.orderRatings >= 3.5 ? "Good" : "Needs Work",
-      changeType: dashboardStats.orderRatings >= 4 ? "up" : "neutral",
+      change: dashboardStats.shopRating >= 4.5 ? "Excellent" : 
+              dashboardStats.shopRating >= 3.5 ? "Good" : 
+              dashboardStats.shopRating > 0 ? "Needs Work" : "No Rating",
+      changeType: dashboardStats.shopRating >= 4 ? "up" : 
+                  dashboardStats.shopRating > 0 ? "neutral" : "down",
       bgColor: "#e2e2e2ff",
       borderColor: "#bebebeff",
       accentColor: "#000000",
     },
   ];
 
-  // Loading state
+  // Loading state - Super fast minimal loader
   if (loading) {
     return (
       <Layout onLogout={onLogout} userData={userData}>
-        <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
-            <div className="inline-block w-12 h-12 border-t-2 border-b-2 border-black rounded-full animate-spin"></div>
-            <p className="mt-4 text-gray-600" style={{ fontFamily: "'Metropolis', sans-serif" }}>
-              Loading dashboard data...
+            {/* Minimal spinner */}
+            <div className="inline-block w-8 h-8 border-2 border-black rounded-full border-t-transparent animate-spin"></div>
+            <p className="mt-4 text-sm text-gray-600" style={{ fontFamily: "'Metropolis', sans-serif" }}>
+              Loading your dashboard...
             </p>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
-
-  // Error state
-  if (error && recentOrders.length === 0) {
-    return (
-      <Layout onLogout={onLogout} userData={userData}>
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <div className="p-6 text-center rounded-lg" style={{ backgroundColor: "#e2e2e2ff" }}>
-            <h3 className="mb-2 text-lg font-semibold" style={{ 
-              color: "#000000", 
-              fontFamily: "'Metropolis', sans-serif", 
-              fontWeight: 600 
-            }}>
-              Error Loading Dashboard
-            </h3>
-            <p className="text-gray-600" style={{ fontFamily: "'Metropolis', sans-serif" }}>
-              {error}
-            </p>
-            <button 
-              onClick={fetchDashboardData}
-              className="px-4 py-2 mt-4 rounded-lg"
-              style={{ 
-                backgroundColor: "#000000", 
-                color: "#FFFFFF",
-                fontFamily: "'Metropolis', sans-serif",
-                fontWeight: 500
-              }}
-            >
-              Retry
-            </button>
           </div>
         </div>
       </Layout>
@@ -501,7 +294,7 @@ const Dashboard = ({ onLogout, userData }) => {
 
   return (
     <Layout onLogout={onLogout} userData={userData}>
-      {/* Header with Today's Summary at Top - IMPROVED DESIGN */}
+      {/* Header */}
       <div className="mb-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div>
@@ -522,9 +315,16 @@ const Dashboard = ({ onLogout, userData }) => {
                 fontWeight: 400,
               }}
             >
-              Welcome back, {userData?.name || "Shop Owner"}! Here's your store performance summary.
+              Welcome back, {userData?.name || "Shop Owner"}!
             </p>
           </div>
+          {error && (
+            <div className="p-3 mt-4 rounded-lg md:mt-0" style={{ backgroundColor: "#e2e2e2ff", border: "1px solid #bebebeff" }}>
+              <p className="text-sm" style={{ color: "#000000", fontFamily: "'Metropolis', sans-serif" }}>
+                {error}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Today's Performance Summary */}
@@ -536,7 +336,6 @@ const Dashboard = ({ onLogout, userData }) => {
           }}
         >
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            {/* Left side: title + date */}
             <div>
               <h3
                 className="text-lg font-semibold text-white"
@@ -545,26 +344,21 @@ const Dashboard = ({ onLogout, userData }) => {
                   fontWeight: 600,
                 }}
               >
-                Today's Performance Summary
+                Today's Performance
               </h3>
-
               <p
                 className="mt-1 text-gray-300"
                 style={{ fontFamily: "'Metropolis', sans-serif" }}
               >
                 {new Date().toLocaleDateString("en-US", {
                   weekday: "long",
-                  year: "numeric",
                   month: "long",
                   day: "numeric",
                 })}
               </p>
             </div>
 
-            {/* Right side: cards */}
             <div className="flex flex-wrap gap-4 md:flex-nowrap md:ml-auto md:justify-end">
-              
-              {/* Orders */}
               <div className="p-3 text-center rounded-lg bg-white/10 backdrop-blur-sm min-w-[110px]">
                 <p
                   className="text-2xl font-bold text-white"
@@ -579,11 +373,10 @@ const Dashboard = ({ onLogout, userData }) => {
                   className="text-sm text-gray-300"
                   style={{ fontFamily: "'Metropolis', sans-serif" }}
                 >
-                  Orders
+                  Today's Orders
                 </p>
               </div>
 
-              {/* Revenue */}
               <div className="p-3 text-center rounded-lg bg-white/10 backdrop-blur-sm min-w-[110px]">
                 <p
                   className="text-2xl font-bold text-white"
@@ -598,19 +391,18 @@ const Dashboard = ({ onLogout, userData }) => {
                   className="text-sm text-gray-300"
                   style={{ fontFamily: "'Metropolis', sans-serif" }}
                 >
-                  Revenue
+                  Today's Revenue
                 </p>
               </div>
 
-              {/* Rating */}
               <div className="p-3 text-center rounded-lg bg-white/10 backdrop-blur-sm min-w-[110px]">
                 <div className="flex items-center justify-center">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <span
                       key={star}
                       className={`text-lg ${
-                        star <= Math.floor(dashboardStats.orderRatings)
-                          ? "text-white"
+                        star <= Math.floor(dashboardStats.shopRating)
+                          ? "text-yellow-400"
                           : "text-gray-600"
                       }`}
                     >
@@ -622,7 +414,7 @@ const Dashboard = ({ onLogout, userData }) => {
                   className="mt-1 text-sm text-gray-300"
                   style={{ fontFamily: "'Metropolis', sans-serif" }}
                 >
-                  {dashboardStats.orderRatings.toFixed(1)}/5
+                  {dashboardStats.shopRating.toFixed(1)}/5
                 </p>
               </div>
             </div>
@@ -630,7 +422,7 @@ const Dashboard = ({ onLogout, userData }) => {
         </div>
       </div>
 
-      {/* Stats Grid - 3 Cards with Beautiful Design */}
+      {/* Stats Grid */}
       <div className="grid grid-cols-1 gap-6 mb-8 md:grid-cols-3">
         {statsCards.map((stat, index) => (
           <div
@@ -643,15 +435,12 @@ const Dashboard = ({ onLogout, userData }) => {
               overflow: "hidden",
             }}
           >
-            {/* Accent bar at top */}
             <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ backgroundColor: stat.accentColor }}
             ></div>
 
             <div className="flex flex-col h-full">
-              
-              {/* Title */}
               <p
                 className="mb-4 text-sm font-medium"
                 style={{
@@ -665,8 +454,6 @@ const Dashboard = ({ onLogout, userData }) => {
               </p>
 
               <div className="flex items-end justify-between mt-auto">
-                
-                {/* Main Value */}
                 <div>
                   <p
                     className="text-3xl font-bold"
@@ -693,24 +480,25 @@ const Dashboard = ({ onLogout, userData }) => {
                   </p>
                 </div>
 
-                {/* Percentage Change */}
-                <div className="flex items-center">
-                  <span
-                    className="flex items-center text-sm font-medium px-3 py-1.5 rounded-full bg-[#bebebeff]"
-                    style={{
-                      fontFamily: "'Metropolis', sans-serif",
-                      fontWeight: 600,
-                      backdropFilter: "blur(6px)",
-                      color: "#000000",
-                    }}
-                  >
-                    <span className="mr-1 text-base">
-                      {stat.changeType === "up" ? "↑" : stat.changeType === "down" ? "↓" : "→"}
+                {stat.change && (
+                  <div className="flex items-center">
+                    <span
+                      className="flex items-center text-sm font-medium px-3 py-1.5 rounded-full bg-[#bebebeff]"
+                      style={{
+                        fontFamily: "'Metropolis', sans-serif",
+                        fontWeight: 600,
+                        backdropFilter: "blur(6px)",
+                        color: "#000000",
+                      }}
+                    >
+                      <span className="mr-1 text-base">
+                        {stat.changeType === "up" ? "↑" : 
+                         stat.changeType === "down" ? "↓" : "→"}
+                      </span>
+                      <span>{stat.change}</span>
                     </span>
-                    <span>{stat.change}</span>
-                  </span>
-                </div>
-
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -719,7 +507,7 @@ const Dashboard = ({ onLogout, userData }) => {
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Left Column - Order Volume Chart */}
+        {/* Left Column */}
         <div className="space-y-6">
           {/* Order Volume Chart */}
           <div
@@ -731,7 +519,6 @@ const Dashboard = ({ onLogout, userData }) => {
               overflow: "hidden",
             }}
           >
-            {/* Accent bar at top */}
             <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ backgroundColor: "#000000" }}
@@ -776,10 +563,8 @@ const Dashboard = ({ onLogout, userData }) => {
             </div>
 
             <div className="h-64">
-              {/* Line Chart Visualization */}
-              {currentOrderData.length > 0 ? (
+              {orderVolumeData.length > 0 ? (
                 <div className="flex flex-col h-full">
-                  {/* Y-axis labels */}
                   <div className="flex items-end flex-1 pb-8">
                     <div
                       className="flex flex-col justify-between h-full mr-2 text-xs"
@@ -795,9 +580,7 @@ const Dashboard = ({ onLogout, userData }) => {
                       ))}
                     </div>
 
-                    {/* Chart Area */}
                     <div className="relative flex-1">
-                      {/* Grid lines */}
                       <div className="absolute inset-0 flex flex-col justify-between">
                         {[...Array(6)].map((_, i) => (
                           <div
@@ -808,14 +591,12 @@ const Dashboard = ({ onLogout, userData }) => {
                         ))}
                       </div>
 
-                      {/* Line Chart */}
                       <div className="relative h-full">
                         <svg
                           className="absolute inset-0 w-full h-full"
                           viewBox="0 0 100 100"
                           preserveAspectRatio="none"
                         >
-                          {/* Gradient fill for area */}
                           <defs>
                             <linearGradient
                               id="orderGradient"
@@ -837,79 +618,46 @@ const Dashboard = ({ onLogout, userData }) => {
                             </linearGradient>
                           </defs>
 
-                          <path
-                            d={`
-                              M 0,${
-                                100 -
-                                (currentOrderData[0]?.orders / getMaxOrders()) *
-                                  100 || 100
-                              }
-                              ${currentOrderData
-                                .map(
-                                  (point, i) =>
-                                    `L ${
-                                      (i / (currentOrderData.length - 1)) * 100
-                                    },${
-                                      100 - (point.orders / getMaxOrders()) * 100
-                                    }`
-                                )
-                                .join(" ")}
-                            `}
-                            fill="none"
-                            stroke="#000000"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d={`
-                              M 0,${
-                                100 -
-                                (currentOrderData[0]?.orders / getMaxOrders()) *
-                                  100 || 100
-                              }
-                              ${currentOrderData
-                                .map(
-                                  (point, i) =>
-                                    `L ${
-                                      (i / (currentOrderData.length - 1)) * 100
-                                    },${
-                                      100 - (point.orders / getMaxOrders()) * 100
-                                    }`
-                                )
-                                .join(" ")}
-                              L 100,100
-                              L 0,100
-                              Z
-                            `}
-                            fill="url(#orderGradient)"
-                          />
+                          {orderChartPoints.length > 1 && (
+                            <>
+                              <path
+                                d={`M ${orderChartPoints.map(p => `${p.x},${p.y}`).join(' L ')}`}
+                                fill="none"
+                                stroke="#000000"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d={`M ${orderChartPoints.map(p => `${p.x},${p.y}`).join(' L ')} L 100,100 L 0,100 Z`}
+                                fill="url(#orderGradient)"
+                              />
+                            </>
+                          )}
                         </svg>
 
-                        {/* Data points */}
-                        {currentOrderData.map((point, i) => (
-                          <div
-                            key={i}
-                            className="absolute w-4 h-4 transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2 border-2 rounded-full shadow-md hover:w-5 hover:h-5"
-                            style={{
-                              backgroundColor: "#FFFFFF",
-                              borderColor: "#000000",
-                              left: `${
-                                (i / (currentOrderData.length - 1)) * 100
-                              }%`,
-                              top: `${
-                                100 - (point.orders / getMaxOrders()) * 100
-                              }%`,
-                              cursor: "pointer",
-                            }}
-                            title={`${point.time}: ${point.orders} orders`}
-                          ></div>
-                        ))}
+                        {orderVolumeData.map((point, i) => {
+                          const percentage = (point.orders / getMaxOrders()) * 100;
+                          const x = (i / (orderVolumeData.length - 1)) * 100;
+                          return (
+                            <div
+                              key={i}
+                              className="absolute w-4 h-4 transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2 border-2 rounded-full shadow-md hover:w-5 hover:h-5"
+                              style={{
+                                backgroundColor: "#FFFFFF",
+                                borderColor: "#000000",
+                                left: `${x}%`,
+                                top: `${100 - percentage}%`,
+                                cursor: "pointer",
+                              }}
+                              title={`${point.label || point.time}: ${point.orders} orders`}
+                            ></div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
 
-                  {/* X-axis labels */}
                   <div
                     className="flex justify-between pt-2 text-xs"
                     style={{
@@ -917,25 +665,26 @@ const Dashboard = ({ onLogout, userData }) => {
                       fontFamily: "'Metropolis', sans-serif",
                     }}
                   >
-                    {currentOrderData.map((point, i) => (
+                    {orderVolumeData.map((point, i) => (
                       <span
                         key={i}
                         className="text-center"
-                        style={{ width: `${100 / currentOrderData.length}%` }}
+                        style={{ width: `${100 / orderVolumeData.length}%` }}
                       >
-                        {point.time}
+                        {point.label || point.time}
                       </span>
                     ))}
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-gray-500">No order data available</p>
+                <div className="flex flex-col items-center justify-center h-full">
+                  <p className="text-gray-500" style={{ fontFamily: "'Metropolis', sans-serif" }}>
+                    No order data available
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Summary */}
             <div
               className="flex items-center justify-between pt-4 mt-4 border-t"
               style={{ borderColor: "#E5E7EB" }}
@@ -958,9 +707,7 @@ const Dashboard = ({ onLogout, userData }) => {
                     fontWeight: 700,
                   }}
                 >
-                  {currentOrderData
-                    .reduce((sum, d) => sum + d.orders, 0)
-                    .toLocaleString()}
+                  {orderVolumeData.reduce((sum, d) => sum + d.orders, 0)}
                 </p>
               </div>
               <div className="text-right">
@@ -981,10 +728,10 @@ const Dashboard = ({ onLogout, userData }) => {
                     fontWeight: 700,
                   }}
                 >
-                  {currentOrderData.length > 0
+                  {orderVolumeData.length > 0
                     ? Math.round(
-                        currentOrderData.reduce((sum, d) => sum + d.orders, 0) /
-                          currentOrderData.length
+                        orderVolumeData.reduce((sum, d) => sum + d.orders, 0) /
+                          orderVolumeData.length
                       )
                     : 0}
                 </p>
@@ -1002,7 +749,6 @@ const Dashboard = ({ onLogout, userData }) => {
               overflow: "hidden",
             }}
           >
-            {/* Accent bar at top */}
             <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ backgroundColor: "#000000" }}
@@ -1036,7 +782,7 @@ const Dashboard = ({ onLogout, userData }) => {
 
             {recentOrders.length > 0 ? (
               <div className="space-y-3">
-                {recentOrders.map((order) => (
+                {recentOrders.slice(0, 5).map((order) => (
                   <div
                     key={order.id}
                     className="flex items-center justify-between p-4 transition-all duration-300 rounded-lg hover:shadow-md"
@@ -1097,13 +843,15 @@ const Dashboard = ({ onLogout, userData }) => {
               </div>
             ) : (
               <div className="p-8 text-center">
-                <p className="text-gray-500">No recent orders found</p>
+                <p className="text-gray-500" style={{ fontFamily: "'Metropolis', sans-serif" }}>
+                  No recent orders found
+                </p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column - Revenue Chart */}
+        {/* Right Column */}
         <div className="space-y-6">
           {/* Revenue Chart */}
           <div
@@ -1115,7 +863,6 @@ const Dashboard = ({ onLogout, userData }) => {
               overflow: "hidden",
             }}
           >
-            {/* Accent bar at top */}
             <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ backgroundColor: "#000000" }}
@@ -1130,7 +877,7 @@ const Dashboard = ({ onLogout, userData }) => {
                   fontWeight: 600,
                 }}
               >
-                Revenue
+                Revenue (Delivered Orders Only)
               </h3>
               <div className="flex items-center gap-1">
                 {["day", "week", "month"].map((range) => (
@@ -1160,10 +907,8 @@ const Dashboard = ({ onLogout, userData }) => {
             </div>
 
             <div className="h-64">
-              {/* Line Chart Visualization */}
-              {currentRevenueData.length > 0 ? (
+              {revenueData.length > 0 ? (
                 <div className="flex flex-col h-full">
-                  {/* Y-axis labels */}
                   <div className="flex items-end flex-1 pb-8">
                     <div
                       className="flex flex-col justify-between h-full mr-2 text-xs"
@@ -1179,9 +924,7 @@ const Dashboard = ({ onLogout, userData }) => {
                       ))}
                     </div>
 
-                    {/* Chart Area */}
                     <div className="relative flex-1">
-                      {/* Grid lines */}
                       <div className="absolute inset-0 flex flex-col justify-between">
                         {[...Array(6)].map((_, i) => (
                           <div
@@ -1192,14 +935,12 @@ const Dashboard = ({ onLogout, userData }) => {
                         ))}
                       </div>
 
-                      {/* Line Chart */}
                       <div className="relative h-full">
                         <svg
                           className="absolute inset-0 w-full h-full"
                           viewBox="0 0 100 100"
                           preserveAspectRatio="none"
                         >
-                          {/* Gradient fill for area */}
                           <defs>
                             <linearGradient
                               id="revenueGradient"
@@ -1221,85 +962,46 @@ const Dashboard = ({ onLogout, userData }) => {
                             </linearGradient>
                           </defs>
 
-                          <path
-                            d={`
-                              M 0,${
-                                100 -
-                                (currentRevenueData[0]?.revenue /
-                                  getMaxRevenue()) *
-                                  100 || 100
-                              }
-                              ${currentRevenueData
-                                .map(
-                                  (point, i) =>
-                                    `L ${
-                                      (i / (currentRevenueData.length - 1)) * 100
-                                    },${
-                                      100 -
-                                      (point.revenue / getMaxRevenue()) * 100
-                                    }`
-                                )
-                                .join(" ")}
-                            `}
-                            fill="none"
-                            stroke="#555555"
-                            strokeWidth="3"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d={`
-                              M 0,${
-                                100 -
-                                (currentRevenueData[0]?.revenue /
-                                  getMaxRevenue()) *
-                                  100 || 100
-                              }
-                              ${currentRevenueData
-                                .map(
-                                  (point, i) =>
-                                    `L ${
-                                      (i / (currentRevenueData.length - 1)) * 100
-                                    },${
-                                      100 -
-                                      (point.revenue / getMaxRevenue()) * 100
-                                    }`
-                                )
-                                .join(" ")}
-                              L 100,100
-                              L 0,100
-                              Z
-                            `}
-                            fill="url(#revenueGradient)"
-                          />
+                          {revenueChartPoints.length > 1 && (
+                            <>
+                              <path
+                                d={`M ${revenueChartPoints.map(p => `${p.x},${p.y}`).join(' L ')}`}
+                                fill="none"
+                                stroke="#555555"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                              <path
+                                d={`M ${revenueChartPoints.map(p => `${p.x},${p.y}`).join(' L ')} L 100,100 L 0,100 Z`}
+                                fill="url(#revenueGradient)"
+                              />
+                            </>
+                          )}
                         </svg>
 
-                        {/* Data points */}
-                        {currentRevenueData.map((point, i) => (
-                          <div
-                            key={i}
-                            className="absolute w-4 h-4 transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2 border-2 rounded-full shadow-md hover:w-5 hover:h-5"
-                            style={{
-                              backgroundColor: "#FFFFFF",
-                              borderColor: "#555555",
-                              left: `${
-                                (i / (currentRevenueData.length - 1)) * 100
-                              }%`,
-                              top: `${
-                                100 - (point.revenue / getMaxRevenue()) * 100
-                              }%`,
-                              cursor: "pointer",
-                            }}
-                            title={`${point.time}: ${formatCurrency(
-                              point.revenue
-                            )}`}
-                          ></div>
-                        ))}
+                        {revenueData.map((point, i) => {
+                          const percentage = (point.revenue / getMaxRevenue()) * 100;
+                          const x = (i / (revenueData.length - 1)) * 100;
+                          return (
+                            <div
+                              key={i}
+                              className="absolute w-4 h-4 transition-all duration-300 transform -translate-x-1/2 -translate-y-1/2 border-2 rounded-full shadow-md hover:w-5 hover:h-5"
+                              style={{
+                                backgroundColor: "#FFFFFF",
+                                borderColor: "#555555",
+                                left: `${x}%`,
+                                top: `${100 - percentage}%`,
+                                cursor: "pointer",
+                              }}
+                              title={`${point.label || point.time}: ${formatCurrency(point.revenue)}`}
+                            ></div>
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
 
-                  {/* X-axis labels */}
                   <div
                     className="flex justify-between pt-2 text-xs"
                     style={{
@@ -1307,25 +1009,29 @@ const Dashboard = ({ onLogout, userData }) => {
                       fontFamily: "'Metropolis', sans-serif",
                     }}
                   >
-                    {currentRevenueData.map((point, i) => (
+                    {revenueData.map((point, i) => (
                       <span
                         key={i}
                         className="text-center"
-                        style={{ width: `${100 / currentRevenueData.length}%` }}
+                        style={{ width: `${100 / revenueData.length}%` }}
                       >
-                        {point.time}
+                        {point.label || point.time}
                       </span>
                     ))}
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-gray-500">No revenue data available</p>
+                <div className="flex flex-col items-center justify-center h-full">
+                  <p className="text-gray-500" style={{ fontFamily: "'Metropolis', sans-serif" }}>
+                    No revenue data available
+                  </p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    (Revenue calculated from delivered orders only)
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Summary */}
             <div
               className="flex items-center justify-between pt-4 mt-4 border-t"
               style={{ borderColor: "#E5E7EB" }}
@@ -1348,9 +1054,7 @@ const Dashboard = ({ onLogout, userData }) => {
                     fontWeight: 700,
                   }}
                 >
-                  {formatCurrency(
-                    currentRevenueData.reduce((sum, d) => sum + d.revenue, 0)
-                  )}
+                  {formatCurrency(revenueData.reduce((sum, d) => sum + d.revenue, 0))}
                 </p>
               </div>
               <div className="text-right">
@@ -1371,12 +1075,10 @@ const Dashboard = ({ onLogout, userData }) => {
                     fontWeight: 700,
                   }}
                 >
-                  {currentRevenueData.length > 0
+                  {revenueData.length > 0
                     ? formatCurrency(
-                        currentRevenueData.reduce(
-                          (sum, d) => sum + d.revenue,
-                          0
-                        ) / currentRevenueData.length
+                        revenueData.reduce((sum, d) => sum + d.revenue, 0) /
+                          revenueData.length
                       )
                     : formatCurrency(0)}
                 </p>
@@ -1394,7 +1096,6 @@ const Dashboard = ({ onLogout, userData }) => {
               overflow: "hidden",
             }}
           >
-            {/* Accent bar at top */}
             <div
               className="absolute top-0 left-0 w-full h-1"
               style={{ backgroundColor: "#000000" }}
@@ -1440,7 +1141,6 @@ const Dashboard = ({ onLogout, userData }) => {
                     onClick={() => navigate(`/products/${product.id}`)}
                   >
                     <div className="flex items-center">
-                      {/* Product rank indicator */}
                       <div
                         className="flex items-center justify-center w-8 h-8 mr-4 rounded-lg"
                         style={{
@@ -1506,7 +1206,8 @@ const Dashboard = ({ onLogout, userData }) => {
                           fontFamily: "'Metropolis', sans-serif",
                         }}
                       >
-                        ${product.price ? product.price.toFixed(2) : (product.revenue / product.sales).toFixed(2)} avg
+                        ${product.price ? product.price.toFixed(2) : 
+                          product.sales > 0 ? (product.revenue / product.sales).toFixed(2) : "0.00"} avg
                       </span>
                     </div>
                   </div>
@@ -1514,41 +1215,14 @@ const Dashboard = ({ onLogout, userData }) => {
               </div>
             ) : (
               <div className="p-8 text-center">
-                <p className="text-gray-500">No product data available</p>
+                <p className="text-gray-500" style={{ fontFamily: "'Metropolis', sans-serif" }}>
+                  No product sales data available
+                </p>
               </div>
             )}
           </div>
         </div>
       </div>
-
-      {/* Debug Info (Remove in production) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="p-4 mt-8 rounded" style={{ backgroundColor: "#e2e2e2ff" }}>
-          <h4 className="font-bold" style={{ fontFamily: "'Metropolis', sans-serif" }}>
-            Debug Info:
-          </h4>
-          <p style={{ fontFamily: "'Metropolis', sans-serif" }}>
-            Shop Owner ID: {userData?._id}
-          </p>
-          <p style={{ fontFamily: "'Metropolis', sans-serif" }}>
-            Order Chart Data Points: {currentOrderData.length}
-          </p>
-          <p style={{ fontFamily: "'Metropolis', sans-serif" }}>
-            Revenue Chart Data Points: {currentRevenueData.length}
-          </p>
-          <button
-            onClick={fetchDashboardData}
-            className="px-3 py-1 mt-2 text-sm rounded"
-            style={{ 
-              backgroundColor: "#000000", 
-              color: "#FFFFFF",
-              fontFamily: "'Metropolis', sans-serif"
-            }}
-          >
-            Refresh Data
-          </button>
-        </div>
-      )}
 
       {/* Add Metropolis font styles */}
       <style jsx global>{`
@@ -1564,18 +1238,6 @@ const Dashboard = ({ onLogout, userData }) => {
             stroke, opacity, box-shadow, transform;
           transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
           transition-duration: 200ms;
-        }
-
-        input:focus,
-        select:focus,
-        button:focus {
-          outline: 2px solid transparent;
-          outline-offset: 2px;
-        }
-
-        .hover\:shadow-lg:hover {
-          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1),
-            0 10px 10px -5px rgba(0, 0, 0, 0.04);
         }
 
         /* Custom scrollbar */
@@ -1604,3 +1266,61 @@ const Dashboard = ({ onLogout, userData }) => {
 
 export default Dashboard;
 
+
+
+
+// src/services/dashboardAPI.js - FIXED VERSION
+import api from './api';
+
+export const dashboardAPI = {
+  /**
+   * Get dashboard summary statistics
+   * @param {string} period - today, week, month, year
+   * @returns {Promise} API response
+   */
+  getDashboardStats: (period = 'month') => {
+    console.log(`📊 Fetching dashboard stats for period: ${period}`);
+    return api.get(`/shop-owner/dashboard/stats?period=${period}`);
+  },
+
+  /**
+   * Get order volume data for charts
+   * @param {string} range - day, week, month
+   * @returns {Promise} API response
+   */
+  getOrderVolume: (range = 'day') => {
+    console.log(`📈 Fetching order volume for range: ${range}`);
+    return api.get(`/shop-owner/dashboard/order-volume?range=${range}`);
+  },
+
+  /**
+   * Get revenue data for charts
+   * @param {string} range - day, week, month
+   * @returns {Promise} API response
+   */
+  getRevenueData: (range = 'day') => {
+    console.log(`💰 Fetching revenue data for range: ${range}`);
+    return api.get(`/shop-owner/dashboard/revenue?range=${range}`);
+  },
+
+  /**
+   * Get recent orders for dashboard
+   * @param {number} limit - Number of orders to fetch
+   * @returns {Promise} API response
+   */
+  getRecentOrders: (limit = 5) => {
+    console.log(`📋 Fetching recent orders, limit: ${limit}`);
+    return api.get(`/shop-owner/dashboard/recent-orders?limit=${limit}`);
+  },
+
+  /**
+   * Get top selling products
+   * @param {number} limit - Number of products to fetch
+   * @param {string} period - week, month, year, all
+   * @returns {Promise} API response
+   */
+  getTopProducts: (limit = 5, period = 'month') => {
+    console.log(`🏆 Fetching top products, limit: ${limit}, period: ${period}`);
+    return api.get(`/shop-owner/dashboard/top-products?limit=${limit}&period=${period}`);
+  }
+};

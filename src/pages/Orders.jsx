@@ -225,11 +225,11 @@ const ShopOrders = ({ onLogout, userData }) => {
       awaiting_manual_assignment: {
         label: "Manual",
         style: { backgroundColor: "#555555", color: "#FFF" }
-      },
-      user_conformation: {
-        label: "Awaiting Customer",
-        style: { backgroundColor: "#555555", color: "#FFF" }
       }
+      // user_conformation: {
+      //   label: "Awaiting Customer",
+      //   style: { backgroundColor: "#555555", color: "#FFF" }
+      // }
     };
 
     const config = statusConfig[status] || {
@@ -294,14 +294,14 @@ const ShopOrders = ({ onLogout, userData }) => {
       borderColor: 'border-gray-200',
       prefix: ''
     },
-    { 
-      label: "Awaiting Customer", 
-      value: stats.user_conformation,
-      color: 'from-gray-50 to-gray-100',
-      textColor: 'text-black',
-      borderColor: 'border-gray-200',
-      prefix: ''
-    },
+    // { 
+    //   label: "Awaiting Customer", 
+    //   value: stats.user_conformation,
+    //   color: 'from-gray-50 to-gray-100',
+    //   textColor: 'text-black',
+    //   borderColor: 'border-gray-200',
+    //   prefix: ''
+    // },
     { 
       label: "Revenue", 
       value: formatCurrency(orders.reduce((sum, order) => sum + (order.pricing?.itemsTotal - order.pricing?.discount || 0), 0)),
@@ -318,7 +318,7 @@ const ShopOrders = ({ onLogout, userData }) => {
     { id: 'pending', label: 'Pending', count: stats.pending },
     { id: 'shop_accepted', label: 'Accepted', count: stats.shop_accepted },
     { id: 'ready_for_pickup', label: 'Ready', count: stats.ready_for_pickup },
-    { id: 'user_conformation', label: 'Awaiting Customer', count: stats.user_conformation },
+    // { id: 'user_conformation', label: 'Awaiting Customer', count: stats.user_conformation },
     { id: 'delivered', label: 'Delivered', count: stats.delivered }
   ];
 

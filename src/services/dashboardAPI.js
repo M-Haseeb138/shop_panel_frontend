@@ -1,55 +1,71 @@
-// src/services/dashboardAPI.js - FIXED VERSION
+// src/services/dashboardAPI.js - FIXED WITH NAMED EXPORTS
 import api from './api';
 
+// Cache object for quick data
+const cache = {};
+
+// ✅ NAMED EXPORTS add karein
+export const getDashboardStats = (period = 'month') => {
+  const cacheKey = `stats-${period}`;
+  if (cache[cacheKey]) {
+    console.log(`📊 Using cached stats for: ${period}`);
+    return Promise.resolve(cache[cacheKey]);
+  }
+  
+  return api.get(`/shop-owner/dashboard/stats?period=${period}`)
+    .then(res => {
+      cache[cacheKey] = res;
+      setTimeout(() => delete cache[cacheKey], 10000);
+      return res;
+    });
+};
+
+export const getOrderVolume = (range = 'day') => {
+  const cacheKey = `orderVolume-${range}`;
+  if (cache[cacheKey]) {
+    console.log(`📈 Using cached order volume for: ${range}`);
+    return Promise.resolve(cache[cacheKey]);
+  }
+  
+  return api.get(`/shop-owner/dashboard/order-volume?range=${range}`)
+    .then(res => {
+      cache[cacheKey] = res;
+      setTimeout(() => delete cache[cacheKey], 10000);
+      return res;
+    });
+};
+
+export const getRevenueData = (range = 'day') => {
+  const cacheKey = `revenue-${range}`;
+  if (cache[cacheKey]) {
+    console.log(`💰 Using cached revenue for: ${range}`);
+    return Promise.resolve(cache[cacheKey]);
+  }
+  
+  return api.get(`/shop-owner/dashboard/revenue?range=${range}`)
+    .then(res => {
+      cache[cacheKey] = res;
+      setTimeout(() => delete cache[cacheKey], 10000);
+      return res;
+    });
+};
+
+export const getRecentOrders = (limit = 5) => {
+  return api.get(`/shop-owner/dashboard/recent-orders?limit=${limit}`);
+};
+
+export const getTopProducts = (limit = 5, period = 'month') => {
+  return api.get(`/shop-owner/dashboard/top-products?limit=${limit}&period=${period}`);
+};
+
+// ✅ Ya phir object export bhi rakhein agar kahi aur use ho raha ho
 export const dashboardAPI = {
-  /**
-   * Get dashboard summary statistics
-   * @param {string} period - today, week, month, year
-   * @returns {Promise} API response
-   */
-  getDashboardStats: (period = 'month') => {
-    console.log(`📊 Fetching dashboard stats for period: ${period}`);
-    return api.get(`/shop-owner/dashboard/stats?period=${period}`);
-  },
-
-  /**
-   * Get order volume data for charts
-   * @param {string} range - day, week, month
-   * @returns {Promise} API response
-   */
-  getOrderVolume: (range = 'day') => {
-    console.log(`📈 Fetching order volume for range: ${range}`);
-    return api.get(`/shop-owner/dashboard/order-volume?range=${range}`);
-  },
-
-  /**
-   * Get revenue data for charts
-   * @param {string} range - day, week, month
-   * @returns {Promise} API response
-   */
-  getRevenueData: (range = 'day') => {
-    console.log(`💰 Fetching revenue data for range: ${range}`);
-    return api.get(`/shop-owner/dashboard/revenue?range=${range}`);
-  },
-
-  /**
-   * Get recent orders for dashboard
-   * @param {number} limit - Number of orders to fetch
-   * @returns {Promise} API response
-   */
-  getRecentOrders: (limit = 5) => {
-    console.log(`📋 Fetching recent orders, limit: ${limit}`);
-    return api.get(`/shop-owner/dashboard/recent-orders?limit=${limit}`);
-  },
-
-  /**
-   * Get top selling products
-   * @param {number} limit - Number of products to fetch
-   * @param {string} period - week, month, year, all
-   * @returns {Promise} API response
-   */
-  getTopProducts: (limit = 5, period = 'month') => {
-    console.log(`🏆 Fetching top products, limit: ${limit}, period: ${period}`);
-    return api.get(`/shop-owner/dashboard/top-products?limit=${limit}&period=${period}`);
+  getDashboardStats,
+  getOrderVolume,
+  getRevenueData,
+  getRecentOrders,
+  getTopProducts,
+  clearCache: () => {
+    Object.keys(cache).forEach(key => delete cache[key]);
   }
 };
