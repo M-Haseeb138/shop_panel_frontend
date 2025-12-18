@@ -1,11 +1,11 @@
-// services/api.js - UPDATED
+// services/api.js - FIXED VERSION
 import axios from 'axios';
-import { API_BASE_URL } from '../config';
+import { API_BASE_URL } from '../config'; // ✅ config.js se import karein
 
-console.log('🔧 API Base URL:', API_BASE_URL);
+console.log('🔧 API Base URL from config:', API_BASE_URL);
 
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_URL, // ✅ Yahan se direct use karein
   headers: {
     'Content-Type': 'application/json',
   },
@@ -20,6 +20,15 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Debugging ke liye
+    console.log('📡 API Request:', {
+      url: config.url,
+      method: config.method,
+      baseURL: config.baseURL,
+      hasToken: !!token
+    });
+    
     return config;
   },
   (error) => {
@@ -30,6 +39,11 @@ api.interceptors.request.use(
 // Response interceptor for error handling
 api.interceptors.response.use(
   (response) => {
+    console.log('✅ API Response:', {
+      url: response.config.url,
+      status: response.status,
+      data: response.data
+    });
     return response;
   },
   (error) => {
@@ -38,8 +52,6 @@ api.interceptors.response.use(
       console.error('🌐 Network Error - Check your internet connection or API URL');
       console.log('Current API URL:', API_BASE_URL);
       
-      // Don't redirect on network errors for protected routes
-      // Just reject the promise
       return Promise.reject({
         ...error,
         isNetworkError: true,
@@ -48,10 +60,11 @@ api.interceptors.response.use(
     }
 
     if (error.response) {
-      console.error('API Error Response:', {
+      console.error('❌ API Error Response:', {
         status: error.response.status,
         data: error.response.data,
-        url: error.response.config?.url
+        url: error.response.config?.url,
+        fullUrl: error.response.config?.baseURL + error.response.config?.url
       });
 
       // Handle 401 Unauthorized (Token expired)
@@ -59,20 +72,14 @@ api.interceptors.response.use(
         console.log('🛡️ Token expired, redirecting to login');
         localStorage.removeItem('shopOwnerToken');
         localStorage.removeItem('userData');
-        // Use navigate instead of window.location for React Router
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
       }
-      
-      // Handle 403 Forbidden
-      if (error.response.status === 403) {
-        console.log('🚫 Access forbidden');
-      }
     } else if (error.request) {
-      console.error('API Request Error:', error.request);
+      console.error('❌ API Request Error:', error.request);
     } else {
-      console.error('API Error:', error.message);
+      console.error('❌ API Error:', error.message);
     }
     
     return Promise.reject(error);

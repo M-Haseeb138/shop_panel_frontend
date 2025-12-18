@@ -52,6 +52,19 @@ const productsAPI = {
 
   // Delete product
   deleteProduct: (productId) => api.delete(`/products/${productId}`),
+
+
+  // services/productsAPI.js - Add this function
+  updateProductStock: (productId, stockData) => {
+    console.log('📦 updateProductStock called:', {
+      productId,
+      stockData,
+      fullEndpoint: `/products/${productId}/stock`
+    });
+    return api.patch(`/products/${productId}/stock`, stockData);
+  }
 };
+
+
 
 export default productsAPI;

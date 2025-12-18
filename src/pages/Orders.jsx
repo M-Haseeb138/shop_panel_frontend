@@ -294,14 +294,6 @@ const ShopOrders = ({ onLogout, userData }) => {
       borderColor: 'border-gray-200',
       prefix: ''
     },
-    // { 
-    //   label: "Awaiting Customer", 
-    //   value: stats.user_conformation,
-    //   color: 'from-gray-50 to-gray-100',
-    //   textColor: 'text-black',
-    //   borderColor: 'border-gray-200',
-    //   prefix: ''
-    // },
     { 
       label: "Revenue", 
       value: formatCurrency(orders.reduce((sum, order) => sum + (order.pricing?.itemsTotal - order.pricing?.discount || 0), 0)),
@@ -349,19 +341,22 @@ const ShopOrders = ({ onLogout, userData }) => {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4 mb-8 md:grid-cols-3 lg:grid-cols-6">
-        {statsData.map((stat, index) => (
-          <div 
-            key={index} 
-            className={`bg-gradient-to-br ${stat.color} border ${stat.borderColor} rounded-xl p-4`}
-          >
-            <div className="mb-1 text-sm text-gray-600">{stat.label}</div>
-            <div className={`text-2xl font-bold ${stat.textColor}`}>
-              {stat.prefix}{stat.value}
-            </div>
-          </div>
-        ))}
+      {/* Stats Cards */}
+<div className="grid grid-cols-1 gap-4 mb-8 sm:grid-cols-2 lg:grid-cols-5">
+  {statsData.map((stat, index) => (
+    <div 
+      key={index} 
+      className={`bg-gradient-to-br ${stat.color} border ${stat.borderColor} rounded-xl p-5 shadow-sm`}
+    >
+      <div className="flex flex-col items-center justify-center h-full text-center">
+        <div className="mb-2 text-sm font-medium text-gray-600">{stat.label}</div>
+        <div className={`text-2xl font-bold ${stat.textColor} truncate w-full`}>
+          {stat.prefix}{stat.value}
+        </div>
       </div>
+    </div>
+  ))}
+</div>
 
       {/* Filters and Search */}
       <div className="p-5 mb-6 bg-white border border-gray-200 rounded-xl">

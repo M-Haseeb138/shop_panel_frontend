@@ -30,6 +30,12 @@ const Products = ({ onLogout, userData }) => {
     loadShops();
   }, [activeTab, searchTerm, selectedCategory, sortBy, selectedShop]);
 
+    // Close modal
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedProduct(null);
+  };
+  
   const loadProducts = async () => {
     try {
       setLoading(true);
@@ -85,6 +91,42 @@ const Products = ({ onLogout, userData }) => {
       setCategories([]); // Set empty array on error
     }
   };
+  
+  
+// pages/Products.jsx - handleStockUpdate function
+const handleStockUpdate = (updatedProduct) => {
+  console.log('🔄 handleStockUpdate called with:', updatedProduct);
+  
+  // 1. Update products array mein stock
+  setProducts(prevProducts => 
+    prevProducts.map(p => 
+      p._id === updatedProduct._id 
+        ? { ...p, stockQuantity: updatedProduct.stockQuantity }
+        : p
+    )
+  );
+  
+  // 2. Update selectedProduct agar modal open hai
+  if (selectedProduct?._id === updatedProduct._id) {
+    console.log('✅ Updating selected product in modal');
+    setSelectedProduct(prev => ({
+      ...prev,
+      stockQuantity: updatedProduct.stockQuantity
+    }));
+  }
+  
+  // 3. Low stock status update karein
+  const updatedProductObj = products.find(p => p._id === updatedProduct._id);
+  if (updatedProductObj) {
+    // Agar stock 10 se kam hai to low stock tab update ho
+    if (updatedProduct.stockQuantity <= 10 && updatedProductObj.stockQuantity > 10) {
+      console.log('📉 Product now low in stock');
+    } else if (updatedProduct.stockQuantity > 10 && updatedProductObj.stockQuantity <= 10) {
+      console.log('📈 Product no longer low in stock');
+    }
+  }
+};
+
 
   const loadShops = async () => {
     try {
@@ -130,11 +172,7 @@ const Products = ({ onLogout, userData }) => {
     setIsModalOpen(true);
   };
 
-  // Close modal
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
-    setSelectedProduct(null);
-  };
+
 
   // Publish Draft Product
   const handlePublishProduct = async (productId, productTitle) => {
@@ -743,6 +781,7 @@ const Products = ({ onLogout, userData }) => {
           onDelete={() => handleDeleteProduct(selectedProduct._id, selectedProduct.title)}
           onPublish={() => handlePublishProduct(selectedProduct._id, selectedProduct.title)}
           onMoveToDraft={() => handleMoveToDraft(selectedProduct._id, selectedProduct.title)}
+           onStockUpdate={handleStockUpdate}
           loading={actionLoading[selectedProduct._id]}
         />
       )}
