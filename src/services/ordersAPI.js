@@ -101,8 +101,58 @@ const ordersAPI = {
       console.error('❌ Error updating order status:', error);
       throw error;
     }
-  }
+  },
+
+  
+  // ========== ORDER MEDIA FUNCTIONS ==========
+  
+   uploadOrderMedia: async (orderId, formData) => {
+    try {
+      console.log('📤 Uploading order media for:', orderId);
+      console.log('📤 FormData entries:');
+      
+      // Log form data for debugging
+      for (let pair of formData.entries()) {
+        console.log('📤 FormData:', pair[0], pair[1]);
+      }
+      
+      const response = await api.post(`/shop-owner/orders/${orderId}/media`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      console.log('✅ Media upload successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error uploading order media:', error);
+      throw error;
+    }
+  },
+
+
+
+
+ // ========== SELF PICKUP OTP VERIFICATION ==========
+  verifySelfPickupOtp: async (orderId, otp) => {
+    try {
+      console.log('🔐 Verifying OTP for order:', { orderId, otp });
+      
+      const response = await api.post('/shop-owner/verify-pickup', {
+        orderId: orderId, // Use order.orderId from MongoDB (like "ORD-12345")
+        otp: otp
+      });
+      
+      console.log('✅ OTP verification successful:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ Error verifying OTP:', error);
+      throw error;
+    }
+  },
+  
 };
+
 
 
 

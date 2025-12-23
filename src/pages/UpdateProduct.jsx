@@ -1,4 +1,3 @@
-// pages/UpdateProduct.jsx - FIXED VERSION
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import productsAPI from '../services/productsAPI';
@@ -28,7 +27,11 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
     sizes: [],
     colors: [],
     tax: '0',
-    status: 'published'
+    status: 'published',
+    // ✅ NEW: Return/Replace fields
+    returnAllowed: false,
+    returnDuration: '',
+    returnConditions: ''
   });
 
   const [images, setImages] = useState([]);
@@ -65,17 +68,51 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
     loadCategories();
   }, [id]);
 
+  // ✅ FIXED: Helper function to parse colors from backend
+  const parseColorsFromBackend = (colorsData) => {
+    if (!colorsData) return [];
+    
+    // If it's already a simple array of strings, return as is
+    if (Array.isArray(colorsData) && colorsData.length > 0 && typeof colorsData[0] === 'string') {
+      return colorsData;
+    }
+    
+    // If it's a JSON string, parse it
+    if (typeof colorsData === 'string') {
+      try {
+        const parsed = JSON.parse(colorsData);
+        // If parsed is an array, return it
+        if (Array.isArray(parsed)) {
+          // Flatten any nested arrays
+          return parsed.flat().map(item => {
+            if (typeof item === 'string') return item;
+            if (typeof item === 'object') return JSON.stringify(item);
+            return String(item);
+          });
+        }
+      } catch (error) {
+        console.error('Error parsing colors:', error);
+        return [];
+      }
+    }
+    
+    return [];
+  };
+
   const loadProduct = async () => {
     try {
       setLoading(true);
-      // Get product details
       const response = await productsAPI.getProductById(id);
       const productData = response.data;
       
       setProduct(productData);
       setCurrentImage(productData.imagePath);
       
-      // Set form data
+      // Parse colors from backend
+      const parsedColors = parseColorsFromBackend(productData.colors);
+      const parsedSizes = Array.isArray(productData.sizes) ? productData.sizes : [];
+      
+      // Set form data with new fields
       setFormData({
         title: productData.title || '',
         description: productData.description || '',
@@ -87,15 +124,25 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
         productType: productData.productType || 'Other',
         targetAgeGroup: productData.targetAgeGroup || 'All',
         gender: productData.gender || 'Unisex',
-        sizes: productData.sizes || [],
-        colors: productData.colors || [],
+        sizes: parsedSizes,
+        colors: parsedColors,
         tax: productData.tax || '0',
-        status: productData.status || 'published'
+        status: productData.status || 'published',
+        // ✅ NEW: Return/Replace fields
+        returnAllowed: productData.returnAllowed || false,
+        returnDuration: productData.returnDuration || '',
+        returnConditions: productData.returnConditions || ''
       });
 
       // Set sizes and colors
-      setSelectedSizes(productData.sizes || []);
-      setSelectedColors(productData.colors || []);
+      setSelectedSizes(parsedSizes);
+      setSelectedColors(parsedColors);
+
+      console.log('📦 Loaded product data:', {
+        originalColors: productData.colors,
+        parsedColors: parsedColors,
+        sizes: parsedSizes
+      });
 
     } catch (error) {
       console.error('❌ Error loading product:', error);
@@ -110,50 +157,61 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
     try {
       const response = await categoriesAPI.getCategories();
       
-      // FIX: Handle different API response structures
       if (response && response.data) {
-        // Check if response.data is an array
         if (Array.isArray(response.data)) {
           setCategories(response.data);
         }
-        // Check if response.data has a categories property
         else if (response.data.categories && Array.isArray(response.data.categories)) {
           setCategories(response.data.categories);
         }
-        // Check if response.data has a data property
         else if (response.data.data && Array.isArray(response.data.data)) {
           setCategories(response.data.data);
         }
-        // If response.data is an object with success property
         else if (response.data.success && Array.isArray(response.data.categories)) {
           setCategories(response.data.categories);
         }
         else {
-          console.warn('⚠️ Unexpected categories API response format:', response.data);
-          setCategories([]); // Set empty array to prevent map error
+          setCategories([]);
         }
       } else {
-        console.warn('⚠️ No data in categories API response');
         setCategories([]);
       }
     } catch (error) {
       console.error('❌ Error loading categories:', error);
-      setCategories([]); // Set empty array on error
+      setCategories([]);
     }
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    const { name, value, type, checked } = e.target;
+
+    if (type === "checkbox") {
+      setFormData(prev => ({
+        ...prev,
+        [name]: checked
+      }));
+    } else {
+      const numericFields = ["price", "tax", "discount", "stockQuantity", "returnDuration", "replaceDuration"];
+
+      if (numericFields.includes(name)) {
+        if (value === "" || /^\d*\.?\d*$/.test(value)) {
+          setFormData(prev => ({
+            ...prev,
+            [name]: value
+          }));
+        }
+      } else {
+        setFormData(prev => ({
+          ...prev,
+          [name]: value
+        }));
+      }
+    }
   };
 
   const handleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     
-    // Validate file size and type
     const validFiles = files.filter(file => {
       if (file.size > 5 * 1024 * 1024) {
         alert(`File ${file.name} is too large. Maximum size is 5MB.`);
@@ -199,15 +257,22 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
     setFormData(prev => ({ ...prev, sizes: newSizes }));
   };
 
+  // ✅ FIXED: Handle color addition
   const handleAddColor = () => {
-    if (colorInput.trim() && !selectedColors.includes(colorInput.trim())) {
-      const newColors = [...selectedColors, colorInput.trim()];
-      setSelectedColors(newColors);
-      setFormData(prev => ({ ...prev, colors: newColors }));
-      setColorInput('');
+    if (colorInput.trim()) {
+      const color = colorInput.trim();
+      if (!selectedColors.includes(color)) {
+        const newColors = [...selectedColors, color];
+        setSelectedColors(newColors);
+        setFormData(prev => ({ ...prev, colors: newColors }));
+        setColorInput('');
+      } else {
+        alert("This color is already added!");
+      }
     }
   };
 
+  // ✅ FIXED: Handle color removal
   const handleRemoveColor = (colorToRemove) => {
     const newColors = selectedColors.filter(color => color !== colorToRemove);
     setSelectedColors(newColors);
@@ -217,6 +282,14 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
   // Get available sizes for current product type
   const getAvailableSizes = () => {
     return sizeTemplates[formData.productType] || sizeTemplates.Other;
+  };
+
+  // ✅ FIXED: Helper function to format colors array for FormData
+  const formatColorsForFormData = (colorsArray) => {
+    if (Array.isArray(colorsArray) && colorsArray.length > 0) {
+      return colorsArray;
+    }
+    return [];
   };
 
   // Update product (publish)
@@ -250,15 +323,33 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
       productData.append('status', formData.status);
       productData.append('discount', formData.discount || '0');
       productData.append('gender', formData.gender);
-      productData.append('sizes', JSON.stringify(selectedSizes));
-      productData.append('colors', JSON.stringify(selectedColors));
+
+      // ✅ NEW: Append Return/Replace fields
+      productData.append('returnAllowed', formData.returnAllowed);
+      productData.append('returnDuration', formData.returnDuration || 0);
+      productData.append('returnConditions', formData.returnConditions || '');
+
+      // ✅ FIXED: Append sizes as simple array (not JSON stringified)
+      if (selectedSizes.length > 0) {
+        selectedSizes.forEach((size, index) => {
+          productData.append(`sizes[${index}]`, size);
+        });
+      }
+
+      // ✅ FIXED: Append colors as simple array (not JSON stringified)
+      if (selectedColors.length > 0) {
+        const formattedColors = formatColorsForFormData(selectedColors);
+        formattedColors.forEach((color, index) => {
+          productData.append(`colors[${index}]`, color);
+        });
+      }
 
       // Append new image if uploaded
       if (images[0]) {
         productData.append('image', images[0]);
       }
 
-      console.log('📦 Updating product with ID:', id);
+      console.log('📦 Updating product with colors:', selectedColors);
 
       const response = await productsAPI.updateProduct(id, productData);
       
@@ -286,7 +377,6 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
     try {
       const productData = new FormData();
       
-      // Append all form data
       productData.append('title', formData.title);
       productData.append('description', formData.description || '');
       productData.append('price', formData.price || '0');
@@ -298,11 +388,30 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
       productData.append('tax', formData.tax || '0');
       productData.append('discount', formData.discount || '0');
       productData.append('gender', formData.gender);
-      productData.append('sizes', JSON.stringify(selectedSizes));
-      productData.append('colors', JSON.stringify(selectedColors));
       productData.append('status', 'draft');
 
-      // Append new image if available
+      // ✅ NEW: Append Return/Replace fields
+      productData.append('returnAllowed', formData.returnAllowed);
+      productData.append('returnDuration', formData.returnDuration || 0);
+      productData.append('replaceAllowed', formData.replaceAllowed);
+      productData.append('replaceDuration', formData.replaceDuration || 0);
+      productData.append('returnConditions', formData.returnConditions || '');
+
+      // ✅ FIXED: Append sizes as simple array
+      if (selectedSizes.length > 0) {
+        selectedSizes.forEach((size, index) => {
+          productData.append(`sizes[${index}]`, size);
+        });
+      }
+
+      // ✅ FIXED: Append colors as simple array
+      if (selectedColors.length > 0) {
+        const formattedColors = formatColorsForFormData(selectedColors);
+        formattedColors.forEach((color, index) => {
+          productData.append(`colors[${index}]`, color);
+        });
+      }
+
       if (images[0]) {
         productData.append('image', images[0]);
       }
@@ -565,6 +674,80 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
               </div>
             </div>
 
+            {/* ✅ NEW: Return & Replace Policy Card */}
+            <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
+              <h2 className="mb-4 text-xl font-semibold text-gray-900">Return Policy</h2>
+              
+              <div className="space-y-6">
+                {/* Return Policy */}
+                <div className="p-4 border border-gray-200 rounded-lg">
+                  <div className="flex items-start mb-4">
+                    <input
+                      type="checkbox"
+                      name="returnAllowed"
+                      checked={formData.returnAllowed}
+                      onChange={handleInputChange}
+                      className="w-5 h-5 mt-1 mr-3"
+                      style={{ accentColor: "#000000" }}
+                      id="returnAllowed"
+                    />
+                    <div className="flex-1">
+                      <label
+                        htmlFor="returnAllowed"
+                        className="text-lg font-medium text-gray-900"
+                      >
+                        Allow Returns
+                      </label>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Customers can return this product if they are not satisfied
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {formData.returnAllowed && (
+                    <div className="ml-8">
+                      <div className="mb-4">
+                        <label className="block mb-2 text-sm font-medium text-gray-700">
+                          Return Duration (Days) *
+                        </label>
+                        <input
+                          type="number"
+                          name="returnDuration"
+                          value={formData.returnDuration}
+                          onChange={handleInputChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                          placeholder="Enter number of days for return"
+                          min="0"
+                          required={formData.returnAllowed}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Customer can return the product within these many days
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Return Conditions */}
+                <div>
+                  <label className="block mb-2 text-sm font-medium text-gray-700">
+                    Return Conditions 
+                  </label>
+                  <textarea
+                    name="returnConditions"
+                    value={formData.returnConditions}
+                    onChange={handleInputChange}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
+                    placeholder="Enter conditions for return (e.g., product must be unused, original packaging, etc.)"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    These conditions will be shown to customers
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Product Details Card */}
             <div className="p-6 bg-white border border-gray-200 rounded-lg shadow-sm">
               <h2 className="mb-4 text-xl font-semibold text-gray-900">Product Details</h2>
@@ -583,7 +766,6 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
                       required
                     >
                       <option value="">Select category</option>
-                      {/* FIXED: Safely map over categories array */}
                       {Array.isArray(categories) && categories.length > 0 ? (
                         categories.map(category => (
                           <option key={category._id} value={category._id}>
@@ -699,24 +881,33 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
                     </button>
                   </div>
 
-                  {/* Selected Sizes */}
-                  <div className="flex flex-wrap gap-2">
-                    {selectedSizes.map((size, index) => (
-                      <span key={index} className="inline-flex items-center px-3 py-1 text-sm text-gray-800 bg-gray-100 rounded-full">
-                        {size}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSize(size)}
-                          className="ml-2 text-gray-600 hover:text-gray-800"
-                        >
-                          ×
-                        </button>
+                  {/* ✅ Selected Sizes Display */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <span className="text-sm font-medium text-gray-700">
+                      Selected Sizes:
+                    </span>
+                    {selectedSizes.length > 0 ? (
+                      selectedSizes.map((size, index) => (
+                        <span key={index} className="inline-flex items-center px-3 py-1 text-sm text-gray-800 bg-gray-100 rounded-full">
+                          {size}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSize(size)}
+                            className="ml-2 text-gray-500 hover:text-gray-800"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500">
+                        No sizes selected
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
 
-                {/* Colors */}
+                {/* ✅ FIXED: Colors Section (Now exactly like sizes) */}
                 <div>
                   <label className="block mb-2 text-sm font-medium text-gray-700">
                     Colors
@@ -738,19 +929,30 @@ const UpdateProduct = ({ onBack, onLogout, userData }) => {
                       Add
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedColors.map((color, index) => (
-                      <span key={index} className="inline-flex items-center px-3 py-1 text-sm text-purple-800 bg-purple-100 rounded-full">
-                        {color}
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveColor(color)}
-                          className="ml-2 text-purple-600 hover:text-purple-800"
-                        >
-                          ×
-                        </button>
+                  
+                  {/* ✅ FIXED: Selected Colors Display (EXACTLY like sizes) */}
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <span className="text-sm font-medium text-gray-700">
+                      Selected Colors:
+                    </span>
+                    {selectedColors.length > 0 ? (
+                      selectedColors.map((color, index) => (
+                        <span key={index} className="inline-flex items-center px-3 py-1 text-sm text-green-800 bg-green-100 rounded-full">
+                          {color}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveColor(color)}
+                            className="ml-2 text-green-600 hover:text-green-800"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-500">
+                        No colors selected
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
               </div>

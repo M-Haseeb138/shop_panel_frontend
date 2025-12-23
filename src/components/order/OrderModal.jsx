@@ -1,4 +1,3 @@
-// components/order/OrderModal.jsx - COMPLETELY UPDATED WITH SELF PICKUP FEATURES
 import React, { useState, useEffect } from "react";
 import ordersAPI from "../../services/ordersAPI";
 
@@ -6,16 +5,84 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
   const [activeTab, setActiveTab] = useState("details");
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [statusError, setStatusError] = useState(null);
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [showDeliveryConfirmation, setShowDeliveryConfirmation] = useState(false);
+  const [showDeliveryConfirmation, setShowDeliveryConfirmation] =
+    useState(false);
 
-  // Function to mark order as ready with self_pickup confirmation
+  // State for self pickup OTP
+  const [otp, setOtp] = useState("");
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(false);
+  const [otpError, setOtpError] = useState(null);
+
+  // Initialize from order data
+  useEffect(() => {
+    // ✅ Check if OTP is already verified (from trackingFlags.isOutForDelivery)
+    if (order && order.trackingFlags) {
+      setOtpVerified(order.trackingFlags.isOutForDelivery || false);
+    }
+  }, [order]);
+
+  // Function to verify OTP
+  const handleVerifyOtp = async () => {
+    if (!otp.trim()) {
+      setOtpError("Please enter OTP");
+      return;
+    }
+
+    if (otp.length !== 4) {
+      setOtpError("OTP must be 4 digits");
+      return;
+    }
+
+    try {
+      setOtpVerifying(true);
+      setOtpError(null);
+
+      // Call API to verify OTP
+      const response = await ordersAPI.verifySelfPickupOtp(order.orderId, otp);
+
+      if (response.success) {
+        setOtpVerified(true);
+        setOtpError(null);
+
+        // Update local order tracking flags
+        if (response.order && response.order.trackingFlags) {
+          order.trackingFlags = response.order.trackingFlags;
+        }
+
+        alert("✅ OTP verified successfully!");
+
+        // Refresh orders if needed
+        if (refreshOrders) {
+          refreshOrders();
+        }
+      } else {
+        throw new Error(response.message || "Invalid OTP");
+      }
+    } catch (error) {
+      console.error("OTP verification error:", error);
+
+      const errorMessage =
+        error.response?.data?.message ||
+        error.message ||
+        "Invalid OTP. Please check and try again.";
+
+      setOtpError(errorMessage);
+      alert(`❌ ${errorMessage}`);
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
+  // Function to mark order as ready with validation
   const handleMarkAsReady = async () => {
     if (!order || !order._id) return;
 
-    // If delivery method is self_pickup, show confirmation popup
-    if (order.deliveryMethod === 'self_pickup') {
-      setShowConfirmation(true);
+    // For delivery orders only
+    if (order.deliveryMethod !== "delivery") {
+      alert(
+        "❌ This button is only for delivery orders. For self-pickup orders, please verify OTP first."
+      );
       return;
     }
 
@@ -29,47 +96,34 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
       setUpdatingStatus(true);
       setStatusError(null);
 
-      console.log('🔄 Marking order as ready:', {
-        orderId: order.orderId,
-        mongoId: order._id,
-        currentStatus: order.status,
-        deliveryMethod: order.deliveryMethod
-      });
-
       const response = await ordersAPI.updateOrderStatus(
         order._id,
         "ready_for_pickup"
       );
 
       if (response && response.success) {
-        console.log('✅ Order marked as ready:', response);
-        
-        // Update local order status
         order.status = "ready_for_pickup";
-        
+
         if (response.order) {
           Object.assign(order, response.order);
         }
 
         if (refreshOrders) {
-          console.log('🔄 Refreshing orders list...');
           await refreshOrders();
         }
 
         alert(`✅ Order ${order.orderId} marked as ready for pickup!`);
-        
-        // Close confirmation popup if open
-        setShowConfirmation(false);
       } else {
-        throw new Error(response?.message || 'Failed to update status');
+        throw new Error(response?.message || "Failed to update status");
       }
     } catch (error) {
       console.error("❌ Error marking order as ready:", error);
-      
-      const errorMsg = error.response?.data?.message || 
-                      error.message || 
-                      "Failed to update order status. Please try again.";
-      
+
+      const errorMsg =
+        error.response?.data?.message ||
+        error.message ||
+        "Failed to update order status. Please try again.";
+
       setStatusError(errorMsg);
       alert(`❌ Error: ${errorMsg}`);
     } finally {
@@ -77,59 +131,39 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
     }
   };
 
-  // Function to handle user confirmation for self_pickup
-  const handleUserConfirmation = async () => {
-    try {
-      setUpdatingStatus(true);
-      
-      // Call API to update status to user_conformation
-      const response = await ordersAPI.updateOrderStatus(
-        order._id,
-        "user_conformation"
-      );
-
-      if (response && response.success) {
-        // Update local order status
-        order.status = "user_conformation";
-        
-        // Close confirmation popup
-        setShowConfirmation(false);
-        
-        // Show success message
-        alert(`✅ Order ${order.orderId} status updated to 'Waiting for User Confirmation'. User needs to confirm pickup.`);
-        
-        // Refresh orders list
-        if (refreshOrders) {
-          await refreshOrders();
-        }
-      } else {
-        throw new Error(response?.message || 'Failed to update status');
-      }
-    } catch (error) {
-      console.error("❌ Error updating to user_conformation:", error);
-      alert(`❌ Error: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setUpdatingStatus(false);
-    }
-  };
-
   // Function to mark self_pickup order as delivered
-  const handleMarkAsDelivered = async () => {
+  const handleMarkAsDeliveredForSelfPickup = async () => {
+    if (!order || !order._id) return;
+
+    // Check if OTP is verified
+    if (!otpVerified) {
+      alert("⚠️ Please verify customer OTP first before marking as delivered.");
+      return;
+    }
+
     try {
       setUpdatingStatus(true);
-      
+
+      console.log("📦 Marking self-pickup order as delivered:", {
+        orderId: order.orderId,
+        otpVerified,
+      });
+
       const response = await ordersAPI.updateOrderStatus(
         order._id,
         "delivered"
       );
-      
+
       if (response.success) {
         order.status = "delivered";
-        alert('✅ Order marked as delivered!');
+        alert("✅ Order marked as delivered!");
         if (refreshOrders) await refreshOrders();
-        setShowDeliveryConfirmation(false);
+        onClose(); // Close modal after successful delivery
+      } else {
+        throw new Error(response.message || "Failed to mark as delivered");
       }
     } catch (error) {
+      console.error("Error marking as delivered:", error);
       alert(`❌ Error: ${error.response?.data?.message || error.message}`);
     } finally {
       setUpdatingStatus(false);
@@ -190,7 +224,7 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
     return formatDate(dateString);
   };
 
-  // Get status badge styling
+  // Get status badge styling - ONLY GRAY, BLACK, WHITE
   const getStatusBadge = (status) => {
     const baseStyle = {
       fontFamily: "'Metropolis', sans-serif",
@@ -206,39 +240,39 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
     const statusConfig = {
       pending: {
         label: "Pending",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       shop_accepted: {
         label: "Accepted",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       shop_preparing: {
         label: "Preparing",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       ready_for_pickup: {
         label: "Ready",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       rider_assigned: {
         label: "Assigned",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       delivered: {
         label: "Delivered",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       cancelled: {
         label: "Cancelled",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       awaiting_manual_assignment: {
         label: "Manual",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
       user_conformation: {
         label: "Awaiting Customer",
-        style: { backgroundColor: "#555555", color: "#FFF" },
+        style: { backgroundColor: "#555555", color: "#FFFFFF" },
       },
     };
 
@@ -254,15 +288,15 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
 
   // Get delivery method badge
   const getDeliveryMethodBadge = (method) => {
-    if (method === 'self_pickup') {
+    if (method === "self_pickup") {
       return (
-        <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-[#555555]  border rounded-full">
+        <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-[#555555] border rounded-full">
           Self Pickup
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-[#555555]  rounded-full">
+      <span className="inline-flex items-center px-3 py-1 text-sm font-medium text-white bg-[#555555] rounded-full">
         Delivery
       </span>
     );
@@ -303,7 +337,7 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
         title: "Ready for Pickup",
         time: order.timestamps?.readyForPickup,
         status: "completed",
-        description: "Order is ready for rider pickup",
+        description: "Order is ready for pickup",
       });
     }
 
@@ -341,118 +375,68 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
 
   return (
     <>
-      {/* Confirmation Popup for Self Pickup */}
-      {showConfirmation && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-          <div className="w-full max-w-md mx-4 overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-2xl">
-            {/* Header */}
-            <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 bg-purple-100 rounded-full">
-                  <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Self Pickup Confirmation</h3>
-                  <p className="mt-1 text-sm text-gray-600">Order #{order.orderId}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="p-6">
-              <div className="mb-4">
-                <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-yellow-100 rounded-full">
-                  <svg className="w-8 h-8 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.698-.833-2.464 0L4.33 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                  </svg>
-                </div>
-                
-                <h4 className="mb-2 font-semibold text-center text-gray-900">
-                  Customer Self Pickup Required
-                </h4>
-                
-                <p className="mb-4 text-center text-gray-700">
-                  This is a <span className="font-bold text-purple-700">Self Pickup</span> order. 
-                  The customer will come to collect the order.
-                </p>
-                
-                <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
-                  <p className="text-sm text-gray-800">
-                    When you click "Confirm & Notify Customer", the order status will change to 
-                    <span className="font-bold text-gray-900"> "Waiting for User Confirmation"</span>. 
-                    The customer needs to confirm pickup before marking as delivered.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex border-t border-gray-200">
-              <button
-                onClick={() => setShowConfirmation(false)}
-                disabled={updatingStatus}
-                className="flex-1 py-4 text-sm font-medium text-gray-700 transition-colors bg-gray-100 hover:bg-gray-200 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUserConfirmation}
-                disabled={updatingStatus}
-                className="flex-1 py-4 text-sm font-medium text-white transition-colors bg-purple-600 hover:bg-purple-700 disabled:opacity-50"
-              >
-                {updatingStatus ? (
-                  <>
-                    <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
-                    Processing...
-                  </>
-                ) : (
-                  'Confirm & Notify Customer'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Delivery Confirmation Popup */}
       {showDeliveryConfirmation && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
           <div className="w-full max-w-md mx-4 overflow-hidden bg-white border border-gray-200 shadow-2xl rounded-2xl">
             <div className="p-6 border-b border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100">
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 bg-green-100 rounded-full">
-                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <div className="flex items-center justify-center w-10 h-10 bg-gray-200 rounded-full">
+                  <svg
+                    className="w-5 h-5 text-gray-900"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Confirm Delivery</h3>
-                  <p className="mt-1 text-sm text-gray-600">Order #{order.orderId}</p>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    Confirm Delivery
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Order #{order.orderId}
+                  </p>
                 </div>
               </div>
             </div>
 
             <div className="p-6">
               <div className="mb-4">
-                <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-green-100 rounded-full">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 bg-gray-200 rounded-full">
+                  <svg
+                    className="w-8 h-8 text-gray-900"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
                   </svg>
                 </div>
-                
+
                 <h4 className="mb-2 font-semibold text-center text-gray-900">
                   Has the customer picked up the order?
                 </h4>
-                
+
                 <p className="mb-4 text-center text-gray-700">
                   Please confirm that the customer has collected the order.
                 </p>
-                
+
                 <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
                   <p className="text-sm text-gray-800">
-                    This will mark the order as <span className="font-bold text-green-700">Delivered</span> 
+                    This will mark the order as{" "}
+                    <span className="font-bold text-gray-900">Delivered</span>
                     and complete the transaction.
                   </p>
                 </div>
@@ -468,9 +452,9 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                 Cancel
               </button>
               <button
-                onClick={handleMarkAsDelivered}
+                onClick={handleMarkAsDeliveredForSelfPickup}
                 disabled={updatingStatus}
-                className="flex-1 py-4 text-sm font-medium text-white transition-colors bg-green-600 hover:bg-green-700 disabled:opacity-50"
+                className="flex-1 py-4 text-sm font-medium text-white transition-colors bg-gray-900 hover:bg-gray-800 disabled:opacity-50"
               >
                 {updatingStatus ? (
                   <>
@@ -478,7 +462,7 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                     Processing...
                   </>
                 ) : (
-                  'Yes, Mark as Delivered'
+                  "Yes, Mark as Delivered"
                 )}
               </button>
             </div>
@@ -502,27 +486,80 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
             {/* Header */}
             <div className="sticky top-0 z-10 bg-white border-b border-gray-200">
               <div className="px-8 py-6">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
                     <h2 className="text-2xl font-bold text-gray-900">
                       Order Details
                     </h2>
-                    <div className="flex items-center gap-4 mt-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-gray-600">
-                          Order ID:
-                        </span>
-                        <span className="font-mono text-lg font-bold text-gray-900">
-                          {order.orderId}
-                        </span>
+                    <div className="flex flex-col gap-3 mt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-gray-600">
+                            Order ID:
+                          </span>
+                          <span className="font-mono text-lg font-bold text-gray-900">
+                            {order.orderId}
+                          </span>
+                        </div>
+                        {getStatusBadge(order.status)}
+                        {getDeliveryMethodBadge(order.deliveryMethod)}
                       </div>
-                      {getStatusBadge(order.status)}
-                      {getDeliveryMethodBadge(order.deliveryMethod)}
+
+                      {/* Preparation Time moved to right side */}
+                      {order.preparationTime && (
+                        <div className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-full bg-gradient-to-br from-gray-50 to-gray-100">
+                          <div className="flex items-center justify-center w-6 h-6 bg-gray-900 rounded-full">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={3}
+                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium text-gray-900">
+                              Prep Time:
+                            </span>
+                            <span className="ml-1 font-semibold text-gray-700">
+                              {order.preparationTime} min
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {/* Success message when media is uploaded */}
+                    {(order.status === "shop_accepted" ||
+                      order.status === "shop_preparing") && (
+                      <div className="p-3 mt-4 border border-gray-200 rounded-lg bg-gray-50">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              You can now mark the order as ready For pickup.
+                            </p>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-gray-700">
+                              <span>
+                                Delivery orders: Directly mark as ready For pickup.
+                              </span>
+                              <span>
+                                Self-pickup: Verify OTP then mark as delivered
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={onClose}
-                    className="p-2 text-gray-400 transition-colors rounded-lg hover:text-gray-600 hover:bg-gray-100"
+                    className="p-2 ml-4 text-gray-400 transition-colors rounded-lg hover:text-gray-600 hover:bg-gray-100"
                   >
                     <svg
                       className="w-6 h-6"
@@ -570,7 +607,7 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                 </div>
               ) : (
                 <>
-                  {/* Details Tab */}
+                  {/* Details Tab - UPDATED LAYOUT */}
                   {activeTab === "details" && (
                     <div className="space-y-8">
                       {/* Order Summary Cards */}
@@ -597,7 +634,9 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                         </div>
 
                         <div className="p-5 border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl">
-                          <div className="mb-2 text-sm text-gray-600">Items</div>
+                          <div className="mb-2 text-sm text-gray-600">
+                            Items
+                          </div>
                           <div className="font-medium text-gray-900">
                             {order.items?.length || 0} items
                           </div>
@@ -608,21 +647,23 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                             Delivery Method
                           </div>
                           <div className="font-medium text-gray-900 capitalize">
-                            {order.deliveryMethod === 'self_pickup' ? 'Self Pickup' : 'Delivery'}
+                            {order.deliveryMethod === "self_pickup"
+                              ? "Self Pickup"
+                              : "Delivery"}
                           </div>
                         </div>
                       </div>
 
-                      {/* Customer & Shop Info */}
+                      {/* Customer & OTP Section - UPDATED LAYOUT */}
                       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-                        {/* Customer Info */}
+                        {/* Customer Information - Left Side */}
                         <div>
                           <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
                             Customer Information
                           </h3>
 
-                          <div className="space-y-4">
-                            <div className="flex items-center px-5">
+                          <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                            <div className="space-y-3">
                               <div>
                                 <h4 className="font-semibold text-gray-900">
                                   <span className="font-semibold text-black">
@@ -631,22 +672,56 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                                   {order.user?.name}
                                 </h4>
 
-                                <div className="mt-1 text-sm text-black">
+                                <div className="mt-2 space-y-2">
                                   {/* Phone */}
-                                  <div className="mb-1">
-                                    <span className="font-semibold text-black">
-                                      Phone No:
-                                    </span>{" "}
-                                    {order.user?.phone}
+                                  <div className="flex items-center">
+                                    <svg
+                                      className="w-4 h-4 mr-2 text-gray-600"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                                      />
+                                    </svg>
+                                    <div>
+                                      <span className="text-sm font-medium text-gray-700">
+                                        Phone:
+                                      </span>
+                                      <div className="font-medium text-gray-900">
+                                        {order.user?.phone}
+                                      </div>
+                                    </div>
                                   </div>
 
                                   {/* Email */}
                                   {order.user?.userId?.email && (
-                                    <div>
-                                      <span className="font-semibold text-black">
-                                        Email Id:
-                                      </span>{" "}
-                                      {order.user.userId.email}
+                                    <div className="flex items-center">
+                                      <svg
+                                        className="w-4 h-4 mr-2 text-gray-600"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <path
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                          strokeWidth={2}
+                                          d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                                        />
+                                      </svg>
+                                      <div>
+                                        <span className="text-sm font-medium text-gray-700">
+                                          Email:
+                                        </span>
+                                        <div className="font-medium text-gray-900">
+                                          {order.user.userId.email}
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -655,64 +730,322 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                           </div>
                         </div>
 
-                        {/* Delivery Info (separate card) */}
+                        {/* Self Pickup OTP Verification - Right Side */}
+                        {order.deliveryMethod === "self_pickup" &&
+                          (order.status === "shop_accepted" ||
+                            order.status === "shop_preparing") && (
+                            <div>
+                              <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
+                                Self Pickup OTP Verification
+                              </h3>
+
+                              <div className="p-4 border border-gray-200 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100">
+                                <div className="space-y-4">
+                                  {/* Status Badge */}
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className={`w-2 h-2 rounded-full ${
+                                          otpVerified
+                                            ? "bg-green-500"
+                                            : "bg-gray-400"
+                                        }`}
+                                      ></div>
+                                      <span
+                                        className={`text-sm font-medium ${
+                                          otpVerified
+                                            ? "text-green-700"
+                                            : "text-gray-600"
+                                        }`}
+                                      >
+                                        {otpVerified
+                                          ? "OTP Verified"
+                                          : "OTP Required"}
+                                      </span>
+                                    </div>
+                                    {otpVerified && (
+                                      <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full">
+                                        Verified ✓
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* OTP Input Section */}
+                                  <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-700">
+                                      Enter Customer OTP
+                                    </label>
+                                    <div className="space-y-3">
+                                      <div className="relative">
+                                        <input
+                                          type="text"
+                                          value={otp}
+                                          onChange={(e) =>
+                                            setOtp(
+                                              e.target.value
+                                                .replace(/\D/g, "")
+                                                .slice(0, 4)
+                                            )
+                                          }
+                                          placeholder="Enter 4 digit OTP"
+                                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-gray-900 focus:border-gray-900 outline-none transition-all ${
+                                            otpVerified
+                                              ? "border-green-500 bg-green-50"
+                                              : otpError
+                                              ? "border-red-300"
+                                              : "border-gray-300"
+                                          }`}
+                                          maxLength={4}
+                                          disabled={otpVerified || otpVerifying}
+                                        />
+                                        {otpVerified && (
+                                          <div className="absolute transform -translate-y-1/2 right-3 top-1/2">
+                                            <div className="flex items-center justify-center w-6 h-6 bg-green-500 rounded-full">
+                                              <svg
+                                                className="w-4 h-4 text-white"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                              >
+                                                <path
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  strokeWidth={3}
+                                                  d="M5 13l4 4L19 7"
+                                                />
+                                              </svg>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* Verify Button */}
+                                      <button
+                                        onClick={handleVerifyOtp}
+                                        disabled={
+                                          !otp.trim() ||
+                                          otpVerifying ||
+                                          otpVerified
+                                        }
+                                        className={`w-full py-3 font-medium rounded-lg transition-all ${
+                                          !otp.trim() ||
+                                          otpVerifying ||
+                                          otpVerified
+                                            ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                                            : "bg-gray-900 text-white hover:bg-gray-800 hover:shadow-md"
+                                        }`}
+                                      >
+                                        {otpVerifying ? (
+                                          <>
+                                            <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
+                                            Verifying OTP...
+                                          </>
+                                        ) : otpVerified ? (
+                                          <>
+                                            <svg
+                                              className="inline-block w-4 h-4 mr-2"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              viewBox="0 0 24 24"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={3}
+                                                d="M5 13l4 4L19 7"
+                                              />
+                                            </svg>
+                                            OTP Verified ✓
+                                          </>
+                                        ) : (
+                                          "Verify Customer OTP"
+                                        )}
+                                      </button>
+                                    </div>
+
+                                    {/* Error Message */}
+                                    {otpError && (
+                                      <div className="p-2 mt-2 border border-red-200 rounded-lg bg-red-50">
+                                        <p className="flex items-center gap-1 text-sm text-red-600">
+                                          <svg
+                                            className="w-4 h-4"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
+                                          </svg>
+                                          {otpError}
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Instructions */}
+                                    {!otpVerified && (
+                                      <div className="p-2 mt-3 border border-gray-200 rounded-lg bg-gray-50">
+                                        <p className="text-xs text-gray-700">
+                                          <span className="font-semibold">
+                                            Note:
+                                          </span>{" "}
+                                          Ask the customer for their OTP when
+                                          they arrive for pickup. After OTP
+                                          verification, you can mark the order
+                                          as delivered.
+                                        </p>
+                                      </div>
+                                    )}
+
+                                    {/* Success Message after OTP verification */}
+                                    {otpVerified && (
+                                      <div className="p-3 mt-4 border border-green-200 rounded-lg bg-green-50">
+                                        <div className="flex items-center gap-2">
+                                          <svg
+                                            className="w-5 h-5 text-green-600"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                            />
+                                          </svg>
+                                          <div>
+                                            <p className="text-sm font-medium text-green-800">
+                                              OTP verified successfully!
+                                            </p>
+                                            <p className="mt-1 text-xs text-green-700">
+                                              You can now mark the order as
+                                              delivered.
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                        {/* Delivery Address (if available) */}
                         {order.user?.deliveryAddress && (
-                          <div>
+                          <div className="lg:col-span-2">
                             <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
                               Customer Delivery Address
                             </h3>
 
-                            <div className="space-y-4">
-                              <div className="pt-0">
-                                <div className="p-3">
-                                  <div className="space-y-2 text-gray-900">
-                                    {(() => {
-                                      const addr =
-                                        order.user?.deliveryAddress || {};
-                                      const fullStreet = addr.street || "";
-                                      const [streetName, ...restParts] =
-                                        fullStreet.split(",");
-                                      const country =
-                                        addr.country ||
-                                        (restParts.length > 0
-                                          ? restParts[restParts.length - 1].trim()
-                                          : "");
+                            <div className="p-4 border border-gray-200 rounded-lg bg-gray-50">
+                              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                                {(() => {
+                                  const addr =
+                                    order.user?.deliveryAddress || {};
+                                  const fullStreet = addr.street || "";
+                                  const [streetName, ...restParts] =
+                                    fullStreet.split(",");
+                                  const country =
+                                    addr.country ||
+                                    (restParts.length > 0
+                                      ? restParts[restParts.length - 1].trim()
+                                      : "");
 
-                                      return (
-                                        <>
-                                          <div>
-                                            <span className="font-semibold">
-                                              Street:
-                                            </span>{" "}
-                                            {streetName?.trim() ||
-                                              fullStreet ||
-                                              "-"}
-                                          </div>
+                                  return (
+                                    <>
+                                      <div className="space-y-1">
+                                        <div className="flex items-center text-sm text-gray-600">
+                                          <svg
+                                            className="w-4 h-4 mr-2"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                            />
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                            />
+                                          </svg>
+                                          <span className="font-medium">
+                                            Street
+                                          </span>
+                                        </div>
+                                        <div className="pl-6 font-medium text-gray-900">
+                                          {streetName?.trim() ||
+                                            fullStreet ||
+                                            "-"}
+                                        </div>
+                                      </div>
 
-                                          <div>
-                                            <span className="font-semibold">
-                                              City:
-                                            </span>{" "}
-                                            {[
-                                              addr.city?.trim(),
-                                              addr.state?.trim(),
-                                              country || "",
-                                            ]
-                                              .filter(Boolean)
-                                              .join(", ") || "-"}
-                                          </div>
+                                      <div className="space-y-1">
+                                        <div className="flex items-center text-sm text-gray-600">
+                                          <svg
+                                            className="w-4 h-4 mr-2"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                                            />
+                                          </svg>
+                                          <span className="font-medium">
+                                            City/State
+                                          </span>
+                                        </div>
+                                        <div className="pl-6 font-medium text-gray-900">
+                                          {[
+                                            addr.city?.trim(),
+                                            addr.state?.trim(),
+                                            country || "",
+                                          ]
+                                            .filter(Boolean)
+                                            .join(", ") || "-"}
+                                        </div>
+                                      </div>
 
-                                          <div>
-                                            <span className="font-semibold">
-                                              Pincode:
-                                            </span>{" "}
-                                            {addr.pincode || "-"}
-                                          </div>
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
-                                </div>
+                                      <div className="space-y-1">
+                                        <div className="flex items-center text-sm text-gray-600">
+                                          <svg
+                                            className="w-4 h-4 mr-2"
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                          >
+                                            <path
+                                              strokeLinecap="round"
+                                              strokeLinejoin="round"
+                                              strokeWidth={2}
+                                              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                                            />
+                                          </svg>
+                                          <span className="font-medium">
+                                            Pincode
+                                          </span>
+                                        </div>
+                                        <div className="pl-6 font-medium text-gray-900">
+                                          {addr.pincode || "-"}
+                                        </div>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
                             </div>
                           </div>
@@ -720,25 +1053,57 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                       </div>
 
                       {/* Special Instructions for Self Pickup */}
-                      {order.deliveryMethod === 'self_pickup' && (
+                      {order.deliveryMethod === "self_pickup" && (
                         <div>
                           <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
                             Self Pickup Information
                           </h3>
                           <div className="p-5 bg-white border border-gray-200 rounded-xl">
                             <div className="flex items-start gap-3">
-                              <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 bg-white rounded-full">
-                                <svg className="w-5 h-5 text-gray-900" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <div className="flex items-center justify-center flex-shrink-0 w-10 h-10 rounded-full bg-gray-50">
+                                <svg
+                                  className="w-5 h-5 text-gray-900"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                  />
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                  />
                                 </svg>
                               </div>
                               <div>
-                                <h4 className="mb-2 font-semibold text-gray-900">Customer will pick up from shop</h4>
+                                <h4 className="mb-2 font-semibold text-gray-900">
+                                  Customer will pick up from shop
+                                </h4>
                                 <p className="text-gray-800">
-                                  Please prepare the order and keep it ready for customer pickup. 
-                                  The customer will collect the order directly from your shop location.
+                                  Please prepare the order and keep it ready for
+                                  customer pickup. The customer will collect the
+                                  order directly from your shop location.
                                 </p>
+                                <div className="p-3 mt-3 rounded-lg bg-gray-50">
+                                  <p className="mb-2 text-sm font-medium text-gray-900">
+                                    Requirements:
+                                  </p>
+                                  <ul className="mt-1 ml-4 space-y-1 text-sm text-gray-700 list-disc">
+                                    <li>Prepare the order</li>
+                                    <li>
+                                      Verify customer OTP when they arrive
+                                    </li>
+                                    <li>
+                                      Mark as delivered after OTP verification
+                                    </li>
+                                  </ul>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -746,35 +1111,36 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                       )}
 
                       {/* Delivery Info */}
-                      {(order.distance?.value || order.estimatedDeliveryTime) && order.deliveryMethod === 'delivery' && (
-                        <div>
-                          <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
-                            Delivery Information
-                          </h3>
-                          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                            {order.distance?.value && (
-                              <div className="p-5 bg-gray-200 border rounded-xl">
-                                <div className="mb-1 text-sm font-medium text-black">
-                                  Distance
+                      {(order.distance?.value || order.estimatedDeliveryTime) &&
+                        order.deliveryMethod === "delivery" && (
+                          <div>
+                            <h3 className="pb-3 mb-4 text-lg font-semibold text-gray-900 border-b border-gray-200">
+                              Delivery Information
+                            </h3>
+                            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                              {order.distance?.value && (
+                                <div className="p-5 border border-gray-200 bg-gray-50 rounded-xl">
+                                  <div className="mb-1 text-sm font-medium text-black">
+                                    Distance
+                                  </div>
+                                  <div className="text-2xl font-bold text-black">
+                                    {order.distance.text}
+                                  </div>
                                 </div>
-                                <div className="text-2xl font-bold text-black">
-                                  {order.distance.text}
+                              )}
+                              {order.estimatedDeliveryTime && (
+                                <div className="p-5 border border-gray-200 bg-gray-50 rounded-xl">
+                                  <div className="mb-1 text-sm font-medium text-black">
+                                    Estimated Delivery
+                                  </div>
+                                  <div className="text-2xl font-bold text-black">
+                                    {formatDate(order.estimatedDeliveryTime)}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
-                            {order.estimatedDeliveryTime && (
-                              <div className="p-5 bg-gray-200 border rounded-xl">
-                                <div className="mb-1 text-sm font-medium text-black">
-                                  Estimated Delivery
-                                </div>
-                                <div className="text-2xl font-bold text-black">
-                                  {formatDate(order.estimatedDeliveryTime)}
-                                </div>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
                     </div>
                   )}
 
@@ -811,16 +1177,18 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                                 {/* Product Image */}
                                 {item.productImage && (
                                   <div className="flex-shrink-0">
-                                    <img
-                                      src={item.productImage}
-                                      alt={item.name}
-                                      className="object-cover w-24 h-24 border border-gray-200 rounded-lg"
-                                      onError={(e) => {
-                                        e.target.onerror = null;
-                                        e.target.src =
-                                          "https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=150&h=150&fit=crop&crop=center";
-                                      }}
-                                    />
+                                    <div className="w-24 h-24 overflow-hidden border border-gray-200 rounded-lg">
+                                      <img
+                                        src={item.productImage}
+                                        alt={item.name}
+                                        className="object-cover w-full h-full"
+                                        onError={(e) => {
+                                          e.target.onerror = null;
+                                          e.target.src =
+                                            "https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?w=150&h=150&fit=crop&crop=center";
+                                        }}
+                                      />
+                                    </div>
                                   </div>
                                 )}
 
@@ -1082,18 +1450,21 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                             </div>
 
                             <div className="flex-1 ml-8">
-                              <div className="p-5 border border-blue-200 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
+                              <div className="p-5 border border-gray-300 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
                                 <div className="flex items-center gap-3">
                                   <div className="w-2 h-2 bg-gray-500 rounded-full animate-pulse" />
                                   <h4 className="font-semibold text-gray-900">
                                     Current Status:{" "}
-                                    {order.status.replace("_", " ").toUpperCase()}
+                                    {order.status
+                                      .replace("_", " ")
+                                      .toUpperCase()}
                                   </h4>
                                 </div>
                                 <p className="mt-2 text-gray-800">
                                   Order is currently{" "}
                                   {order.status.replace("_", " ").toLowerCase()}
-                                  {order.deliveryMethod === 'self_pickup' && " (Self Pickup)"}
+                                  {order.deliveryMethod === "self_pickup" &&
+                                    " (Self Pickup)"}
                                 </p>
                               </div>
                             </div>
@@ -1105,21 +1476,22 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                 </>
               )}
             </div>
-
             {/* Footer */}
             <div className="sticky bottom-0 px-8 py-6 bg-white border-t border-gray-200">
-              <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-                <div className="text-sm text-gray-600">
-                  Last updated: {formatDate(order.updatedAt)}
+              <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                {/* DEBUG INFO - Remove after testing */}
+                <div className="hidden text-xs text-gray-500">
+                  Debug: OTP Verified: {otpVerified ? "Yes" : "No"}
                 </div>
 
                 {statusError && (
-                  <div className="px-4 py-2 text-sm text-red-600 rounded-lg bg-red-50">
+                  <div className="px-4 py-2 text-sm text-gray-900 bg-gray-100 rounded-lg">
                     {statusError}
                   </div>
                 )}
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Print Order Button */}
                   <button
                     onClick={() => window.print()}
                     className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -1127,66 +1499,96 @@ const OrderModal = ({ order, isOpen, onClose, loading, refreshOrders }) => {
                     Print Order
                   </button>
 
-                  {/* Show Mark as Ready button for accepted/preparing orders */}
-                  {(order.status === "shop_accepted" ||
-                    order.status === "shop_preparing") && (
-                    <button
-                      onClick={handleMarkAsReady}
-                      disabled={updatingStatus}
-                      className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ${
-                        updatingStatus
-                          ? "bg-gray-400 cursor-not-allowed"
-                          : order.deliveryMethod === 'self_pickup'
-                          ? "bg-purple-600 hover:bg-purple-700"
-                          : "bg-gray-900 hover:bg-gray-800"
-                      }`}
-                    >
-                      {updatingStatus ? (
-                        <>
-                          <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
-                          Processing...
-                        </>
-                      ) : (
-                        `Mark as ${order.deliveryMethod === 'self_pickup' ? 'Ready (Self Pickup)' : 'Ready'}`
-                      )}
-                    </button>
-                  )}
+                  {/* ✅ SELF-PICKUP ORDERS: Verify OTP & Mark as Delivered */}
+                  {order.deliveryMethod === "self_pickup" &&
+                    (order.status === "shop_accepted" ||
+                      order.status === "shop_preparing") && (
+                      <>
+                        {/* "Mark as Delivered" Button (Only enabled after OTP verification) */}
+                        <button
+                          onClick={handleMarkAsDeliveredForSelfPickup}
+                          disabled={updatingStatus || !otpVerified}
+                          className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ${
+                            updatingStatus || !otpVerified
+                              ? "bg-gray-400 cursor-not-allowed"
+                              : "bg-gray-900 hover:bg-gray-800"
+                          }`}
+                          title={!otpVerified ? "Verify OTP first" : ""}
+                        >
+                          {updatingStatus ? (
+                            <>
+                              <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
+                              Processing...
+                            </>
+                          ) : (
+                            "Mark as Delivered"
+                          )}
+                        </button>
+                      </>
+                    )}
 
-                  {/* Already ready message */}
-                  {order.status === "ready_for_pickup" && order.deliveryMethod === 'delivery' && (
-                    <div className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg">
-                      ✓ Ready for Pickup
-                    </div>
-                  )}
+                  {/* ✅ DELIVERY ORDERS: Mark as Ready for Pickup */}
+                  {order.deliveryMethod === "delivery" &&
+                    (order.status === "shop_accepted" ||
+                      order.status === "shop_preparing") && (
+                      <button
+                        onClick={handleMarkAsReady}
+                        disabled={updatingStatus}
+                        className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ${
+                          updatingStatus
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : "bg-gray-900 hover:bg-gray-800"
+                        }`}
+                      >
+                        {updatingStatus ? (
+                          <>
+                            <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
+                            Processing...
+                          </>
+                        ) : (
+                          "Mark as Ready for Pickup"
+                        )}
+                      </button>
+                    )}
 
-                  {/* For self_pickup orders that are ready */}
-                  {order.status === "ready_for_pickup" && order.deliveryMethod === 'self_pickup' && (
-                    <div className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg">
-                      ✓ Ready for Customer Pickup
-                    </div>
-                  )}
+                  {/* Already ready message for delivery orders */}
+                  {order.status === "ready_for_pickup" &&
+                    order.deliveryMethod === "delivery" && (
+                      <div className="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-lg">
+                        ✓ Ready for Pickup
+                      </div>
+                    )}
 
-                  {/* Show Mark as Delivered button for user_conformation status (self_pickup) */}
-                  {order.status === "user_conformation" && order.deliveryMethod === "self_pickup" && (
-                    <button
-                      onClick={() => setShowDeliveryConfirmation(true)}
-                      disabled={updatingStatus}
-                      className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ${
-                        updatingStatus
-                          ? "bg-gray-400 cursor-not-allowed"
-                          : "bg-green-600 hover:bg-green-700"
-                      }`}
-                    >
-                      {updatingStatus ? (
-                        <>
-                          <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
-                          Processing...
-                        </>
-                      ) : (
-                        'Customer Picked Up?'
-                      )}
-                    </button>
-                  )}
+                  {/* Already delivered message for self-pickup orders */}
+                  {order.status === "delivered" &&
+                    order.deliveryMethod === "self_pickup" && (
+                      <div className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg">
+                        ✓ Delivered
+                      </div>
+                    )}
+
+                  {/* Show Customer Picked Up? button for ready_for_pickup self-pickup orders */}
+                  {order.status === "ready_for_pickup" &&
+                    order.deliveryMethod === "self_pickup" && (
+                      <button
+                        onClick={() => setShowDeliveryConfirmation(true)}
+                        disabled={updatingStatus}
+                        className={`px-5 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ${
+                          updatingStatus
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : "bg-gray-900 hover:bg-gray-800"
+                        }`}
+                      >
+                        {updatingStatus ? (
+                          <>
+                            <span className="inline-block w-4 h-4 mr-2 border-2 border-white rounded-full border-t-transparent animate-spin"></span>
+                            Processing...
+                          </>
+                        ) : (
+                          "Customer Picked Up?"
+                        )}
+                      </button>
+                    )}
 
                   <button
                     onClick={onClose}

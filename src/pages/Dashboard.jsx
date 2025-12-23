@@ -217,7 +217,7 @@ const Dashboard = ({ onLogout, userData }) => {
         dashboardAPI.getOrderVolume(orderChartRange),
         dashboardAPI.getRevenueData(revenueChartRange)
       ]);
-
+      
       // Process stats
       if (statsRes.data.success) {
         const stats = statsRes.data.stats || {};

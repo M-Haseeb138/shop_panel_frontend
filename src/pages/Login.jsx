@@ -1,7 +1,8 @@
-// pages/Login.jsx - COMPLETE FIXED
+// pages/Login.jsx - CLEAN VERSION
 import React, { useState } from "react";
 import authAPI from "../services/authAPI";
-import api from "../services/api"; // ✅ IMPORT API
+import api from "../services/api";
+import { initializeAndSaveFCM } from "../services/fcmAPI";
 
 const Login = ({ onLogin, onSignup }) => {
   const [credentials, setCredentials] = useState({
@@ -10,7 +11,33 @@ const Login = ({ onLogin, onSignup }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-   const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const initializeFCMAfterLogin = async () => {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const token = localStorage.getItem('shopOwnerToken');
+      if (!token) return { success: false, message: "Not authenticated" };
+      
+      await initializeAndSaveFCM();
+      
+      if (Notification.permission === 'granted') {
+        try {
+          new Notification('Notifications Enabled', {
+            body: 'You will receive push notifications for new orders',
+            icon: '/logo192.png'
+          });
+        } catch (error) {
+          // Silent fail
+        }
+      }
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, message: error.message };
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -21,9 +48,6 @@ const Login = ({ onLogin, onSignup }) => {
       const response = await authAPI.login(credentials);
       const { token, shopOwner } = response.data;
 
-      console.log("✅ Login API Response:", response.data);
-
-      // Check if data is in different structure
       let userData = shopOwner;
 
       if (!userData && response.data.data) {
@@ -38,23 +62,13 @@ const Login = ({ onLogin, onSignup }) => {
         throw new Error("No user data received from server");
       }
 
-      // **IMPORTANT: Token store karo**
       localStorage.setItem("shopOwnerToken", token);
-
-      // **ALSO: Store email/password temporarily for token refresh**
       localStorage.setItem("userEmail", credentials.email);
       localStorage.setItem("userPassword", credentials.password);
 
-      // **NEW: Immediately test the token**
       try {
         const testResponse = await api.get("/shop-owner/profile");
-        console.log("✅ Token test successful:", testResponse.data);
-
-        // Get fresh user data with the token
-        const freshUserData =
-          testResponse.data.data ||
-          testResponse.data.owner ||
-          testResponse.data;
+        const freshUserData = testResponse.data.data || testResponse.data.owner || testResponse.data;
 
         const normalizedUserData = {
           ...freshUserData,
@@ -64,11 +78,10 @@ const Login = ({ onLogin, onSignup }) => {
 
         localStorage.setItem("userData", JSON.stringify(normalizedUserData));
 
+        initializeFCMAfterLogin().catch(() => {});
+
         onLogin(token, normalizedUserData);
       } catch (tokenError) {
-        console.error("❌ Token test failed:", tokenError);
-
-        // Fallback to original data
         const normalizedUserData = {
           ...userData,
           accountStatus: userData.accountStatus || "Pending",
@@ -76,11 +89,12 @@ const Login = ({ onLogin, onSignup }) => {
         };
 
         localStorage.setItem("userData", JSON.stringify(normalizedUserData));
+        
+        initializeFCMAfterLogin().catch(() => {});
+
         onLogin(token, normalizedUserData);
       }
     } catch (err) {
-      console.error("❌ Login error:", err);
-
       let errorMessage = "Login failed. Please check your credentials.";
 
       if (err.response?.data?.message) {
@@ -97,75 +111,58 @@ const Login = ({ onLogin, onSignup }) => {
 
   return (
     <div className="flex min-h-screen font-sans">
-      {/* Left Side - Branding */}
       <div className="hidden lg:flex lg:flex-1 lg:flex-col lg:justify-center lg:items-center lg:bg-gradient-to-br lg:from-black lg:to-gray-900 lg:text-white lg:p-8">
-       <div className="text-center">
+        <div className="text-center">
+          <div className="flex flex-col items-center p-6 text-black">
+            <img
+              src="/images/zed.png"
+              alt="Shop owner"
+              style={{ width: "180px", height: "auto" }}
+            />
 
-  {/* Logo + Label Container */}
-  <div className="flex flex-col items-center p-6 text-black">
-
-    {/* ZED Logo */}
-    {/* <img
-      src="public/images/zed.png"
-      alt="Shop owner"
-      style={{ width: "180px", height: "auto" }}
-    /> */}
-    <img
-  src="/images/zed.png"
-  alt="Shop owner"
-  style={{ width: "180px", height: "auto" }}
-/>
-
-
-    {/* SHOP OWNER text matched to logo width */}
-    <h1
-      style={{
-        width: "180px",          // MATCHES logo width
-        marginTop: "6px",
-        fontFamily: "Metropolis, sans-serif",
-        fontWeight: 700,
-        fontSize: "18px",
-        lineHeight: "22px",
-        letterSpacing: "1px",
-        textAlign: "center",
-        color: "white",
-      }}
-    >
-      SHOP OWNER
-    </h1>
-
-  </div>
-
-  {/* Feature List */}
-  <div className="space-y-4 text-left">
-    {["Secure Dashboard", "Real-time Analytics", "Complete Control"].map(
-      (item, index) => (
-        <div key={index} className="flex items-center space-x-3">
-          <div
-            className="flex items-center justify-center w-8 h-8 rounded-full"
-            style={{ backgroundColor: "#27C840" }}
-          >
-            <span className="text-white">✓</span>
+            <h1
+              style={{
+                width: "180px",
+                marginTop: "6px",
+                fontFamily: "Metropolis, sans-serif",
+                fontWeight: 700,
+                fontSize: "18px",
+                lineHeight: "22px",
+                letterSpacing: "1px",
+                textAlign: "center",
+                color: "white",
+              }}
+            >
+              SHOP OWNER
+            </h1>
           </div>
 
-          <span
-            style={{
-              fontFamily: "'Metropolis', sans-serif",
-              fontWeight: 400,
-            }}
-          >
-            {item}
-          </span>
+          <div className="space-y-4 text-left">
+            {["Secure Dashboard", "Real-time Analytics", "Complete Control"].map(
+              (item, index) => (
+                <div key={index} className="flex items-center space-x-3">
+                  <div
+                    className="flex items-center justify-center w-8 h-8 rounded-full"
+                    style={{ backgroundColor: "#27C840" }}
+                  >
+                    <span className="text-white">✓</span>
+                  </div>
+
+                  <span
+                    style={{
+                      fontFamily: "'Metropolis', sans-serif",
+                      fontWeight: 400,
+                    }}
+                  >
+                    {item}
+                  </span>
+                </div>
+              )
+            )}
+          </div>
         </div>
-      )
-    )}
-  </div>
-
-</div>
-
       </div>
 
-      {/* Right Side - Login Form */}
       <div className="flex flex-col items-center justify-center flex-1 p-8 bg-white">
         <div className="w-full max-w-md">
           <div className="mb-8 text-center">
@@ -259,7 +256,7 @@ const Login = ({ onLogin, onSignup }) => {
               />
             </div>
 
-          <div>
+            <div>
               <label
                 htmlFor="password"
                 className="block mb-2 text-sm font-medium"
@@ -293,7 +290,7 @@ const Login = ({ onLogin, onSignup }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 focus:outline-none"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer focus:outline-none"
                   style={{ color: "#555555" }}
                 >
                   {showPassword ? (
@@ -331,7 +328,7 @@ const Login = ({ onLogin, onSignup }) => {
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center justify-center w-full px-4 py-3 space-x-2 font-medium text-white transition-all duration-200 rounded-lg hover:opacity-90 focus:ring-4 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center justify-center w-full px-4 py-3 space-x-2 font-medium text-white transition-all duration-200 rounded-lg cursor-pointer hover:opacity-90 focus:ring-4 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
               style={{
                 backgroundColor: "#000000",
                 fontFamily: "'Metropolis', sans-serif",
@@ -356,7 +353,6 @@ const Login = ({ onLogin, onSignup }) => {
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth={2}
-                     
                     />
                   </svg>
                 </>
@@ -376,7 +372,7 @@ const Login = ({ onLogin, onSignup }) => {
               <button
                 type="button"
                 onClick={onSignup}
-                className="font-medium transition-all duration-200 hover:opacity-80"
+                className="font-medium transition-all duration-200 cursor-pointer hover:opacity-80"
                 style={{
                   color: "#000000",
                   fontFamily: "'Metropolis', sans-serif",
@@ -390,19 +386,18 @@ const Login = ({ onLogin, onSignup }) => {
         </div>
       </div>
 
-      {/* Add Metropolis font styles */}
       <style>{`
-  @import url('https://fonts.cdnfonts.com/css/metropolis');
-  
-  body {
-    font-family: 'Metropolis', sans-serif;
-  }
-  
-  input:focus {
-    border-color: #000000 !important;
-    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) !important;
-  }
-`}</style>
+        @import url('https://fonts.cdnfonts.com/css/metropolis');
+        
+        body {
+          font-family: 'Metropolis', sans-serif;
+        }
+        
+        input:focus {
+          border-color: #000000 !important;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1) !important;
+        }
+      `}</style>
     </div>
   );
 };

@@ -3,9 +3,10 @@ import 'typeface-metropolis';
 
 const Sidebar = ({ activePage, navigateTo }) => {
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'orders', label: 'Orders' },
+    
+    { id: 'orders', label: 'Home' },
     { id: 'products', label: 'Products' },
+    { id: 'dashboard', label: 'Analytics' },
     { id: 'settings', label: 'Settings' },
   ];
 

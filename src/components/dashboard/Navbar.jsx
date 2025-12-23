@@ -4,6 +4,7 @@ import { FaStore, FaBell, FaSignOutAlt } from 'react-icons/fa';
 import shopProfileAPI from '../../services/shopprofile';
 import StoreProfileModal from '../profile/StoreProfileModal';
 import authAPI from '../../services/authAPI';
+  import NotificationBell from '../NotificationBell';
 
 const Navbar = ({ onLogout, userData }) => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -12,6 +13,8 @@ const Navbar = ({ onLogout, userData }) => {
   const [storeProfile, setStoreProfile] = useState(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const dropdownRef = useRef(null);
+
+
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -190,6 +193,7 @@ const Navbar = ({ onLogout, userData }) => {
                 <FaBell className="w-5 h-5" style={{ color: '#555555' }} />
                 
               </button> */}
+              <NotificationBell/>
 
               {/* User Menu */}
               <div className="relative" ref={dropdownRef}>

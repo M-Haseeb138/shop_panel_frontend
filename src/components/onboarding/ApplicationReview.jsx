@@ -65,7 +65,8 @@ const ApplicationReview = ({
 
           // Force a reload to ensure auth state is updated
           setTimeout(() => {
-            navigate("/dashboard");
+            // navigate("/dashboard");
+             navigate("/orders");
           }, 100);
         } else {
           setLocalStatus("pending");

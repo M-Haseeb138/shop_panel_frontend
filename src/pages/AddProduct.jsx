@@ -1,4 +1,3 @@
-// pages/AddProduct.jsx - COMPLETE WITH WHATSAPP-STYLE IMAGE CROPPING
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import productsAPI from "../services/productsAPI";
@@ -33,6 +32,10 @@ const AddProduct = ({ onBack }) => {
     sizes: [],
     colors: [],
     tax: "0",
+    // ✅ NEW: Return/Replace fields
+    returnAllowed: false,
+    returnDuration: "",
+    returnConditions: ""
   });
 
   const [selectedSizes, setSelectedSizes] = useState([]);
@@ -51,7 +54,7 @@ const AddProduct = ({ onBack }) => {
     "Not Applicable",
   ];
 
-  // Age range options - FIXED to match backend
+  // Age range options
   const ageRangeOptions = [
     "0-2",
     "3-5",
@@ -97,14 +100,6 @@ const AddProduct = ({ onBack }) => {
       try {
         const user = JSON.parse(storedUserData);
 
-        console.log("🛍️ User data check:", {
-          accountStatus: user.accountStatus,
-          onboarding: user.onboarding,
-          id: user._id,
-          email: user.email,
-        });
-
-        // ✅ FIXED LOGIC: Check account status only
         const accountStatus = user.accountStatus || "Pending";
         const isAccountApproved =
           accountStatus === "Active" ||
@@ -113,16 +108,13 @@ const AddProduct = ({ onBack }) => {
           accountStatus === "verified";
 
         if (!isAccountApproved) {
-          console.log("❌ Account not approved, status:", accountStatus);
           alert("Please wait for admin approval before adding products.");
           navigate("/pending-approval");
           return;
         }
 
-        console.log("✅ Account is approved, loading categories...");
         setIsAuthenticated(true);
         setUserData(user);
-
         await loadCategories();
       } catch (error) {
         console.error("Auth check failed:", error);
@@ -133,84 +125,59 @@ const AddProduct = ({ onBack }) => {
     checkAuthAndLoadData();
   }, [navigate]);
 
-  // ✅ FIXED: Load categories from database
+  // Load categories from database
   const loadCategories = async () => {
     try {
-      console.log("📋 Fetching categories from API...");
       const response = await categoriesAPI.getCategories();
-      console.log("📋 Categories API response structure:", response.data);
-
-      const responseData = response.data;
-      console.log("Full response data:", responseData);
-
       let categoriesArray = [];
 
       if (
-        responseData &&
-        responseData.categories &&
-        Array.isArray(responseData.categories)
+        response.data &&
+        response.data.categories &&
+        Array.isArray(response.data.categories)
       ) {
-        console.log("✅ Found categories array in response.data.categories");
-        categoriesArray = responseData.categories;
-      } else if (Array.isArray(responseData)) {
-        console.log("⚠️ Response.data is directly an array");
-        categoriesArray = responseData;
-      } else {
-        console.error(
-          "❌ Unexpected categories response format:",
-          responseData
-        );
+        categoriesArray = response.data.categories;
+      } else if (Array.isArray(response.data)) {
+        categoriesArray = response.data;
       }
 
-      console.log("✅ Processed categories array:", categoriesArray);
       setCategories(categoriesArray);
     } catch (error) {
       console.error("❌ Failed to load categories:", error);
-
-      if (error.response) {
-        console.error("Error response:", {
-          status: error.response.status,
-          data: error.response.data,
-        });
-
-        if (error.response.status === 401) {
-          alert("Session expired. Please login again.");
-          localStorage.removeItem("shopOwnerToken");
-          localStorage.removeItem("userData");
-          navigate("/login");
-        }
+      if (error.response?.status === 401) {
+        alert("Session expired. Please login again.");
+        localStorage.removeItem("shopOwnerToken");
+        localStorage.removeItem("userData");
+        navigate("/login");
       }
-
       setCategories([]);
     }
   };
 
   const handleInputChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
 
-    console.log(`📝 Field ${name} changed to:`, value);
-
-    const numericFields = ["price", "tax", "discount", "stockQuantity"];
-
-    if (numericFields.includes(name)) {
-      if (value === "" || /^\d*\.?\d*$/.test(value)) {
-        if (name === "tax" || name === "discount") {
-          setFormData((prev) => ({
-            ...prev,
-            [name]: value === "" ? "" : String(value),
-          }));
-        } else {
-          setFormData((prev) => ({
-            ...prev,
-            [name]: value,
-          }));
-        }
-      }
-    } else {
+    if (type === "checkbox") {
       setFormData((prev) => ({
         ...prev,
-        [name]: value,
+        [name]: checked
       }));
+    } else {
+      const numericFields = ["price", "tax", "discount", "stockQuantity", "returnDuration", "replaceDuration"];
+
+      if (numericFields.includes(name)) {
+        if (value === "" || /^\d*\.?\d*$/.test(value)) {
+          setFormData((prev) => ({
+            ...prev,
+            [name]: value
+          }));
+        }
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          [name]: value
+        }));
+      }
     }
 
     if (name === "productType") {
@@ -224,7 +191,8 @@ const AddProduct = ({ onBack }) => {
 
   useEffect(() => {
     console.log("📊 Form data updated:", formData);
-  }, [formData]);
+    console.log("🎨 Selected Colors:", selectedColors);
+  }, [formData, selectedColors]);
 
   const handlePreview = async () => {
     if (!formData.title) {
@@ -238,14 +206,11 @@ const AddProduct = ({ onBack }) => {
     }
 
     try {
-      console.log("📸 Creating preview with images:", images);
-
       const imagePreviews = [];
       for (const imageFile of images) {
         if (imageFile instanceof File) {
           try {
             const reader = new FileReader();
-
             const imageDataUrl = await new Promise((resolve, reject) => {
               reader.onload = () => resolve(reader.result);
               reader.onerror = () => reject(new Error("Failed to read image"));
@@ -265,8 +230,6 @@ const AddProduct = ({ onBack }) => {
         }
       }
 
-      console.log("✅ Created image previews:", imagePreviews.length);
-
       const previewData = {
         title: formData.title,
         description: formData.description || "",
@@ -281,12 +244,14 @@ const AddProduct = ({ onBack }) => {
         sku: formData.sku || "",
         sizes: selectedSizes,
         colors: selectedColors,
+        // ✅ NEW: Return/Replace data
+        returnAllowed: formData.returnAllowed,
+        returnDuration: formData.returnDuration || 0,
+        returnConditions: formData.returnConditions || "",
         shop: userData?._id,
         shopName: userData?.shop?.name || userData?.name || "My Shop",
         createdAt: new Date().toISOString(),
       };
-
-      console.log("📦 Preview data prepared:", previewData);
 
       const previewPayload = {
         productData: previewData,
@@ -299,7 +264,6 @@ const AddProduct = ({ onBack }) => {
         JSON.stringify(previewPayload)
       );
 
-      console.log("🚀 Navigating to preview...");
       navigate("/preview-product");
     } catch (error) {
       console.error("❌ Error in preview:", error);
@@ -328,7 +292,6 @@ const AddProduct = ({ onBack }) => {
     if (validFiles.length > 0) {
       const file = validFiles[0];
 
-      // Create preview URL for cropper
       const reader = new FileReader();
       reader.onload = (event) => {
         setCroppingImage(event.target.result);
@@ -375,15 +338,22 @@ const AddProduct = ({ onBack }) => {
     setFormData((prev) => ({ ...prev, sizes: newSizes }));
   };
 
+  // ✅ Handle color addition
   const handleAddColor = () => {
-    if (colorInput.trim() && !selectedColors.includes(colorInput.trim())) {
-      const newColors = [...selectedColors, colorInput.trim()];
-      setSelectedColors(newColors);
-      setFormData((prev) => ({ ...prev, colors: newColors }));
-      setColorInput("");
+    if (colorInput.trim()) {
+      const color = colorInput.trim();
+      if (!selectedColors.includes(color)) {
+        const newColors = [...selectedColors, color];
+        setSelectedColors(newColors);
+        setFormData((prev) => ({ ...prev, colors: newColors }));
+        setColorInput("");
+      } else {
+        alert("This color is already added!");
+      }
     }
   };
 
+  // ✅ Handle color removal
   const handleRemoveColor = (colorToRemove) => {
     const newColors = selectedColors.filter((color) => color !== colorToRemove);
     setSelectedColors(newColors);
@@ -399,8 +369,6 @@ const AddProduct = ({ onBack }) => {
         throw new Error("No stored credentials. Please login again.");
       }
 
-      console.log("🔄 Getting fresh token with stored credentials...");
-
       const loginResponse = await axios.post(
         "https://cultural-marketplace-backend-npv2.vercel.app/api/shop-owner/login",
         {
@@ -411,8 +379,6 @@ const AddProduct = ({ onBack }) => {
 
       const newToken = loginResponse.data.token;
       localStorage.setItem("shopOwnerToken", newToken);
-
-      console.log("✅ Got fresh token:", newToken.substring(0, 30) + "...");
 
       return newToken;
     } catch (error) {
@@ -427,8 +393,6 @@ const AddProduct = ({ onBack }) => {
 
     try {
       const token = localStorage.getItem("shopOwnerToken");
-
-      console.log("🔐 Token check:", token ? "Token exists" : "No token");
 
       if (!token) {
         alert("Please login to create products.");
@@ -477,29 +441,28 @@ const AddProduct = ({ onBack }) => {
       productFormData.append("gender", formData.gender);
       productFormData.append("status", "published");
 
+      // ✅ NEW: Append Return/Replace fields
+      productFormData.append("returnAllowed", formData.returnAllowed);
+      productFormData.append("returnDuration", formData.returnDuration || 0);
+      productFormData.append("returnConditions", formData.returnConditions || "");
+
+      // ✅ Append sizes as simple array
       if (selectedSizes.length > 0) {
-        productFormData.append("sizes", JSON.stringify(selectedSizes));
+        selectedSizes.forEach((size, index) => {
+          productFormData.append(`sizes[${index}]`, size);
+        });
       }
 
+      // ✅ Append colors as simple array
       if (selectedColors.length > 0) {
-        productFormData.append("colors", JSON.stringify(selectedColors));
+        selectedColors.forEach((color, index) => {
+          productFormData.append(`colors[${index}]`, color);
+        });
       }
 
-      // Append image with key 'image' (singular)
+      // Append image
       if (images[0]) {
         productFormData.append("image", images[0]);
-        console.log("📸 Appending image:", images[0].name);
-      }
-
-      console.log("📦 FormData contents:");
-      for (let [key, value] of productFormData.entries()) {
-        if (value instanceof File) {
-          console.log(
-            `  ${key}: File - ${value.name} (${value.type}, ${value.size} bytes)`
-          );
-        } else {
-          console.log(`  ${key}:`, value);
-        }
       }
 
       console.log("🚀 Creating product...");
@@ -516,11 +479,10 @@ const AddProduct = ({ onBack }) => {
         }
       );
 
-      console.log("✅ Product creation response:", response.data);
-
       if (response.data.success) {
         alert("✅ Product published successfully!");
 
+        // Reset form
         setFormData({
           title: "",
           description: "",
@@ -535,6 +497,11 @@ const AddProduct = ({ onBack }) => {
           sizes: [],
           colors: [],
           tax: "0",
+          returnAllowed: false,
+          returnDuration: "",
+          replaceAllowed: false,
+          replaceDuration: "",
+          returnConditions: ""
         });
         setImages([]);
         setSelectedSizes([]);
@@ -551,7 +518,7 @@ const AddProduct = ({ onBack }) => {
 
       if (error.response) {
         console.error("Response data:", error.response.data);
-
+        
         if (error.response.status === 401) {
           errorMessage = "Session expired. Please login again.";
           localStorage.removeItem("shopOwnerToken");
@@ -635,19 +602,32 @@ const AddProduct = ({ onBack }) => {
         formData.discount ? parseFloat(formData.discount) : 0
       );
       productFormData.append("gender", formData.gender);
-      productFormData.append("sizes", JSON.stringify(selectedSizes));
-      productFormData.append("colors", JSON.stringify(selectedColors));
       productFormData.append("status", "draft");
+
+      // ✅ NEW: Append Return/Replace fields for draft
+      productFormData.append("returnAllowed", formData.returnAllowed);
+      productFormData.append("returnDuration", formData.returnDuration || 0);
+      productFormData.append("replaceAllowed", formData.replaceAllowed);
+      productFormData.append("replaceDuration", formData.replaceDuration || 0);
+      productFormData.append("returnConditions", formData.returnConditions || "");
+
+      // ✅ Append sizes
+      if (selectedSizes.length > 0) {
+        selectedSizes.forEach((size, index) => {
+          productFormData.append(`sizes[${index}]`, size);
+        });
+      }
+
+      // ✅ Append colors
+      if (selectedColors.length > 0) {
+        selectedColors.forEach((color, index) => {
+          productFormData.append(`colors[${index}]`, color);
+        });
+      }
 
       if (images[0]) {
         productFormData.append("image", images[0]);
       }
-
-      console.log("📦 Saving draft with data:", {
-        title: formData.title,
-        category: formData.category,
-        status: "draft",
-      });
 
       const response = await axios.post(
         "https://cultural-marketplace-backend-npv2.vercel.app/api/products",
@@ -869,47 +849,7 @@ const AddProduct = ({ onBack }) => {
                   </p>
                 </div>
               )}
-
-              {userData?.businessDetails?.address && (
-                <div
-                  className="p-3 bg-white rounded-lg"
-                  style={{ border: "1px solid #555555" }}
-                >
-                  <p
-                    className="text-sm font-medium"
-                    style={{
-                      color: "#555555",
-                      fontFamily: "'Metropolis', sans-serif",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Business Location
-                  </p>
-                  <p
-                    className="font-medium"
-                    style={{
-                      color: "#000000",
-                      fontFamily: "'Metropolis', sans-serif",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {userData.businessDetails.address.street},{" "}
-                    {userData.businessDetails.address.city}
-                  </p>
-                </div>
-              )}
             </div>
-            <p
-              className="mt-4 text-sm"
-              style={{
-                color: "#000000",
-                fontFamily: "'Metropolis', sans-serif",
-                fontWeight: 400,
-              }}
-            >
-              Products will be listed under your shop. You can manage all your
-              products from the Products page.
-            </p>
           </div>
 
           {/* Essential Information Card */}
@@ -1163,8 +1103,7 @@ const AddProduct = ({ onBack }) => {
                 />
               </div>
 
-            
-              {/* Image Upload - WHATSAPP STYLE */}
+              {/* Image Upload */}
               <div>
                 <label
                   className="block mb-2 text-sm font-medium"
@@ -1177,7 +1116,6 @@ const AddProduct = ({ onBack }) => {
                   Product Image *
                 </label>
 
-                {/* Upload Button */}
                 <div
                   className="p-8 text-center transition-colors border-2 border-dashed rounded-lg cursor-pointer hover:border-black"
                   style={{ borderColor: "#555555" }}
@@ -1235,8 +1173,7 @@ const AddProduct = ({ onBack }) => {
                         fontWeight: 400,
                       }}
                     >
-                      JPG, PNG • Max 5MB • 
-                      {/* WhatsApp-style cropping */}
+                      JPG, PNG • Max 5MB
                     </p>
                   </div>
                   <input
@@ -1248,7 +1185,7 @@ const AddProduct = ({ onBack }) => {
                   />
                 </div>
 
-                {/* Image Preview - Only Image */}
+                {/* Image Preview */}
                 {images.length > 0 && (
                   <div className="mt-6">
                     <div className="flex items-center justify-between mb-4">
@@ -1293,7 +1230,6 @@ const AddProduct = ({ onBack }) => {
                       </div>
                     </div>
 
-                    {/* Simple Image Preview Only */}
                     <div
                       className="flex flex-col items-center justify-center p-6 border rounded-lg"
                       style={{
@@ -1302,7 +1238,6 @@ const AddProduct = ({ onBack }) => {
                         minHeight: "200px",
                       }}
                     >
-                      {/* Centered Image Container */}
                       <div
                         className="relative w-48 h-32 mb-4 overflow-hidden border rounded-lg"
                         style={{
@@ -1318,7 +1253,6 @@ const AddProduct = ({ onBack }) => {
                         />
                       </div>
 
-                      {/* Frame Size Badge */}
                       <div className="mb-4">
                         <span
                           className="px-3 py-1 text-xs font-medium rounded-full"
@@ -1333,7 +1267,6 @@ const AddProduct = ({ onBack }) => {
                         </span>
                       </div>
 
-                      {/* Recrop Button */}
                       <button
                         type="button"
                         onClick={() => {
@@ -1366,11 +1299,147 @@ const AddProduct = ({ onBack }) => {
                         </svg>
                         Recrop Image
                       </button>
-
-                    
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* ✅ NEW: Return & Replace Policy Card */}
+          <div
+            className="p-6 bg-white border rounded-lg shadow-sm"
+            style={{ borderColor: "#555555" }}
+          >
+            <h2
+              className="mb-4 text-xl font-semibold"
+              style={{
+                color: "#000000",
+                fontFamily: "'Metropolis', sans-serif",
+                fontWeight: 600,
+              }}
+            >
+              Return  Policy
+            </h2>
+            
+            <div className="space-y-6">
+              {/* Return Policy */}
+              <div className="p-4 border rounded-lg" style={{ borderColor: "#e2e8f0" }}>
+                <div className="flex items-start mb-4">
+                  <input
+                    type="checkbox"
+                    name="returnAllowed"
+                    checked={formData.returnAllowed}
+                    onChange={handleInputChange}
+                    className="w-5 h-5 mt-1 mr-3"
+                    style={{ accentColor: "#000000" }}
+                    id="returnAllowed"
+                  />
+                  <div className="flex-1">
+                    <label
+                      htmlFor="returnAllowed"
+                      className="text-lg font-medium"
+                      style={{
+                        color: "#000000",
+                        fontFamily: "'Metropolis', sans-serif",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Allow Returns
+                    </label>
+                    <p
+                      className="mt-1 text-sm"
+                      style={{
+                        color: "#555555",
+                        fontFamily: "'Metropolis', sans-serif",
+                        fontWeight: 400,
+                      }}
+                    >
+                      Customers can return this product if they are not satisfied
+                    </p>
+                  </div>
+                </div>
+                
+                {formData.returnAllowed && (
+                  <div className="ml-8">
+                    <div className="mb-4">
+                      <label
+                        className="block mb-2 text-sm font-medium"
+                        style={{
+                          color: "#000000",
+                          fontFamily: "'Metropolis', sans-serif",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Return Duration (Days) *
+                      </label>
+                      <input
+                        type="number"
+                        name="returnDuration"
+                        value={formData.returnDuration}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+                        style={{
+                          borderColor: "#555555",
+                          color: "#000000",
+                          fontFamily: "'Metropolis', sans-serif",
+                          fontWeight: 400,
+                        }}
+                        placeholder="Enter number of days for return"
+                        min="0"
+                        required={formData.returnAllowed}
+                      />
+                      <p
+                        className="mt-1 text-xs"
+                        style={{
+                          color: "#555555",
+                          fontFamily: "'Metropolis', sans-serif",
+                          fontWeight: 400,
+                        }}
+                      >
+                        Customer can return the product within these many days
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Return Conditions */}
+              <div>
+                <label
+                  className="block mb-2 text-sm font-medium"
+                  style={{
+                    color: "#000000",
+                    fontFamily: "'Metropolis', sans-serif",
+                    fontWeight: 500,
+                  }}
+                >
+                  Return  Conditions
+                </label>
+                <textarea
+                  name="returnConditions"
+                  value={formData.returnConditions}
+                  onChange={handleInputChange}
+                  rows={3}
+                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+                  style={{
+                    borderColor: "#555555",
+                    color: "#000000",
+                    fontFamily: "'Metropolis', sans-serif",
+                    fontWeight: 400,
+                  }}
+                  placeholder="Enter conditions for return (e.g., product must be unused, original packaging, etc.)"
+                />
+                <p
+                  className="mt-1 text-xs"
+                  style={{
+                    color: "#555555",
+                    fontFamily: "'Metropolis', sans-serif",
+                    fontWeight: 400,
+                  }}
+                >
+                  These conditions will be shown to customers
+                </p>
               </div>
             </div>
           </div>
@@ -1636,8 +1705,18 @@ const AddProduct = ({ onBack }) => {
                     </button>
                   </div>
 
-                  {/* Selected Sizes */}
-                  <div className="flex flex-wrap gap-2">
+                  {/* ✅ Selected Sizes Display (Simple Format) */}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <span
+                      className="text-sm font-medium"
+                      style={{
+                        color: "#555555",
+                        fontFamily: "'Metropolis', sans-serif",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Selected Sizes:
+                    </span>
                     {selectedSizes.map((size, index) => (
                       <span
                         key={index}
@@ -1660,11 +1739,23 @@ const AddProduct = ({ onBack }) => {
                         </button>
                       </span>
                     ))}
+                    {selectedSizes.length === 0 && (
+                      <span
+                        className="text-sm"
+                        style={{
+                          color: "#999999",
+                          fontFamily: "'Metropolis', sans-serif",
+                          fontWeight: 400,
+                        }}
+                      >
+                        No sizes selected
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
 
-              {/* Colors – hidden when Grocery + Other */}
+              {/* ✅ Colors Section – hidden when Grocery + Other */}
               {!isGroceryOther && (
                 <div>
                   <label
@@ -1708,7 +1799,19 @@ const AddProduct = ({ onBack }) => {
                       Add
                     </button>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  
+                  {/* ✅ Selected Colors Display (Simple Format - sizes ki tarah) */}
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <span
+                      className="text-sm font-medium"
+                      style={{
+                        color: "#555555",
+                        fontFamily: "'Metropolis', sans-serif",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Selected Colors:
+                    </span>
                     {selectedColors.map((color, index) => (
                       <span
                         key={index}
@@ -1731,6 +1834,18 @@ const AddProduct = ({ onBack }) => {
                         </button>
                       </span>
                     ))}
+                    {selectedColors.length === 0 && (
+                      <span
+                        className="text-sm"
+                        style={{
+                          color: "#999999",
+                          fontFamily: "'Metropolis', sans-serif",
+                          fontWeight: 400,
+                        }}
+                      >
+                        No colors selected
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
@@ -1877,7 +1992,7 @@ const AddProduct = ({ onBack }) => {
                       </svg>
                       <span>Publish Product</span>
                     </>
-                  )} 
+                  )}
                 </button>
               </div>
             </div>
@@ -1895,7 +2010,7 @@ const AddProduct = ({ onBack }) => {
           }}
           image={croppingImage}
           onSave={handleSaveCroppedImage}
-          aspectRatio={164 / 104} // Specific 164x104 aspect ratio
+          aspectRatio={164 / 104}
         />
       )}
 

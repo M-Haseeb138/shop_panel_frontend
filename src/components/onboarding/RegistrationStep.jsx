@@ -1,5 +1,6 @@
-// components/onboarding/RegistrationStep.jsx - SIMPLIFIED
+// components/onboarding/RegistrationStep.jsx - UPDATED WITH TOAST
 import React, { useState } from "react";
+import { showError, showSuccess } from "../../utils/toast";
 
 const RegistrationStep = ({
   formData,
@@ -13,36 +14,48 @@ const RegistrationStep = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Prevent default browser validation
+    e.stopPropagation();
 
-    console.log("📝 Current formData:", formData);
+    console.log("Form submission attempt");
 
-    // ✅ Validate form before proceeding
     if (!formData.email || !formData.password || !formData.confirmPassword) {
-      alert("Please fill in all required fields");
-      return;
+      showError("Please fill in all required fields");
+      return false; // Important: return false to prevent default
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      alert("Passwords do not match");
-      return;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      showError("Please enter a valid email address");
+      return false;
     }
 
     if (formData.password.length < 6) {
-      alert("Password must be at least 6 characters long");
-      return;
+      showError("Password must be at least 6 characters long");
+      return false;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
-      alert("Please enter a valid email address");
-      return;
+    if (formData.password !== formData.confirmPassword) {
+      showError("Passwords do not match. Please check and try again.");
+      return false;
     }
 
-    console.log("✅ Form validated, calling onNext...");
-
-    // ✅ Just call onNext - formData is already updated via updateFormData
+    showSuccess("Account created successfully! Proceeding to next step...");
     onNext();
+    return false; // Prevent default form submission
+  };
+
+  const handlePasswordChange = (e) => {
+    updateFormData({ password: e.target.value });
+  };
+
+  const handleConfirmPasswordChange = (e) => {
+    updateFormData({ confirmPassword: e.target.value });
+  };
+
+  const handleEmailChange = (e) => {
+    updateFormData({ email: e.target.value });
   };
 
   return (
@@ -69,7 +82,11 @@ const RegistrationStep = ({
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form 
+        onSubmit={handleSubmit} 
+        className="space-y-6"
+        noValidate // This prevents browser default validation
+      >
         {/* Email Field */}
         <div>
           <label
@@ -102,10 +119,7 @@ const RegistrationStep = ({
             <input
               type="email"
               value={formData?.email || ""}
-              onChange={(e) => {
-                console.log("📧 Email changed:", e.target.value);
-                updateFormData({ email: e.target.value });
-              }}
+              onChange={handleEmailChange}
               className="block w-full py-3 pl-10 pr-3 border rounded-lg focus:outline-none focus:ring-2"
               style={{
                 borderColor: "#555555",
@@ -151,10 +165,7 @@ const RegistrationStep = ({
             <input
               type={showPassword ? "text" : "password"}
               value={formData?.password || ""}
-              onChange={(e) => {
-                console.log("🔐 Password changed");
-                updateFormData({ password: e.target.value });
-              }}
+              onChange={handlePasswordChange}
               className="block w-full py-3 pl-10 pr-10 border rounded-lg focus:outline-none focus:ring-2"
               style={{
                 borderColor: "#555555",
@@ -169,7 +180,7 @@ const RegistrationStep = ({
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 focus:outline-none"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer focus:outline-none"
               style={{ color: "#555555" }}
             >
               <svg
@@ -235,9 +246,7 @@ const RegistrationStep = ({
             <input
               type={showConfirmPassword ? "text" : "password"}
               value={formData.confirmPassword || ""}
-              onChange={(e) =>
-                updateFormData({ confirmPassword: e.target.value })
-              }
+              onChange={handleConfirmPasswordChange}
               className="block w-full py-3 pl-10 pr-10 border rounded-lg focus:outline-none focus:ring-2"
               style={{
                 borderColor: "#555555",
@@ -251,7 +260,7 @@ const RegistrationStep = ({
             <button
               type="button"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute inset-y-0 right-0 flex items-center pr-3 focus:outline-none"
+              className="absolute inset-y-0 right-0 flex items-center pr-3 cursor-pointer focus:outline-none"
               style={{ color: "#555555" }}
             >
               <svg
@@ -281,7 +290,7 @@ const RegistrationStep = ({
             type="button"
             onClick={onBack}
             disabled={loading}
-            className="flex items-center px-6 py-3 space-x-2 transition-all border rounded-lg hover:opacity-80 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center px-6 py-3 space-x-2 transition-all border rounded-lg cursor-pointer hover:opacity-80 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               color: "#000000",
               borderColor: "#555555",
@@ -289,13 +298,12 @@ const RegistrationStep = ({
               fontWeight: 500,
             }}
           >
-          
             <span>Back to Login</span>
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center px-6 py-3 space-x-2 text-white transition-all rounded-lg hover:opacity-90 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center px-6 py-3 space-x-2 text-white transition-all rounded-lg cursor-pointer hover:opacity-90 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               backgroundColor: "#000000",
               fontFamily: "'Metropolis', sans-serif",
@@ -310,14 +318,12 @@ const RegistrationStep = ({
             ) : (
               <>
                 Continue 
-               
               </>
             )}
           </button>
         </div>
       </form>
 
-      {/* Add focus styles */}
       <style jsx>{`
         input:focus {
           border-color: #000000 !important;
